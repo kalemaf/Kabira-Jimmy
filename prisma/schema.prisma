@@ -1,0 +1,771 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Staff roles — project-description.md → User Roles & Permissions.
+// Member (portal) accounts are a separate model (see Member below), not a StaffRole.
+enum StaffRole {
+  SuperAdmin
+  Manager
+  Treasurer
+  Secretary
+  LoanOfficer
+  Cashier
+  AccountsOfficer
+  RecoveryOfficer
+  Auditor
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  name          String?
+  phone         String?
+  emailVerified Boolean
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  role          StaffRole  @default(LoanOfficer)
+  branchId      String?
+  branch        Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  sessions      Session[]
+  accounts      Account[]
+
+  // KYC identity fields captured at staff registration — required for every
+  // NEW hire (enforced in lib/schemas/staff.ts) so a staff member with
+  // access to cash/loan approvals can always be identified and located.
+  // Nullable at the DB level only because staff registered before this was
+  // added predate it; nothing here is optional going forward.
+  nationalIdNumber String?
+  idDocumentUrl    String? // scan/photo of their national ID
+  selfieUrl        String? // photo captured at registration, for identification
+  district         String?
+  subCounty        String?
+  village          String?
+  nextOfKinName    String?
+  nextOfKinPhone   String?
+
+  preparedApplications LoanApplication[] @relation("PreparedApplications")
+  disbursementInitiatedApplications LoanApplication[] @relation("DisbursementInitiator")
+  approvalSteps        ApprovalStep[]
+  disbursedLoans       Loan[]            @relation("DisbursedLoans")
+  collectedRepayments  Repayment[]
+  recoveryCases        RecoveryCase[]
+  auditLogs            AuditLog[]
+  savingsTransactions  SavingsTransaction[]
+  confirmedSavingsTransactions SavingsTransaction[] @relation("ConfirmedSavingsTransactions")
+  loanNotes            LoanNote[]
+
+  @@index([branchId])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// ── Member portal auth — a separate Better Auth instance (lib/member-auth.ts)
+// so staff and member sessions never share a cookie or table.
+model MemberUser {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  name          String?
+  emailVerified Boolean
+  image         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  memberId      String?         @unique
+  member        Member?         @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  sessions      MemberSession[]
+  accounts      MemberAccount[]
+  initiatedSavingsTransactions SavingsTransaction[]
+  initiatedLoanRepayments      Repayment[]
+  submittedLoanApplications    LoanApplication[]
+
+  @@map("member_user")
+}
+
+model MemberSession {
+  id        String     @id @default(cuid())
+  userId    String
+  token     String
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      MemberUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("member_session")
+}
+
+model MemberAccount {
+  id                    String     @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  user                  MemberUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("member_account")
+}
+
+model MemberVerification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("member_verification")
+}
+
+// ── Phase 2 — Branches, Members, Loan Products ──────────────────────────────
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  district  String
+  address   String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff   User[]
+  members Member[]
+  loans      Loan[]
+  repayments Repayment[]
+  savingsTransactions SavingsTransaction[]
+  ledgerEntries       LedgerEntry[]
+
+  @@map("branch")
+}
+
+enum Gender {
+  Male
+  Female
+}
+
+enum MemberStatus {
+  Active
+  Inactive
+  Suspended
+}
+
+model Member {
+  id               String       @id @default(cuid())
+  sequenceNumber   Int          @default(autoincrement())
+  memberNumber     String       @unique
+  firstName        String
+  lastName         String
+  phone            String
+  email            String?
+  nin              String?      @unique
+  nationalIdNumber String?
+  dob              DateTime?
+  gender           Gender?
+  occupation       String?
+  employer         String?
+  district         String?
+  subCounty        String?
+  village          String?
+  dateJoined       DateTime     @default(now())
+  status           MemberStatus @default(Active)
+  photoUrl         String?
+  signatureUrl     String?
+  nextOfKinName    String?
+  nextOfKinPhone   String?
+  emergencyContact String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  documents        MemberDocument[]
+  guarantors       Guarantor[]
+  memberUser       MemberUser?
+  loanApplications LoanApplication[]
+  loans            Loan[]
+  savingsAccounts  SavingsAccount[]
+
+  @@index([branchId])
+  @@index([status])
+  @@map("member")
+}
+
+enum MemberDocumentType {
+  NationalId
+  Passport
+  UtilityBill
+  EmploymentLetter
+  MembershipAgreement
+}
+
+model MemberDocument {
+  id         String             @id @default(cuid())
+  memberId   String
+  member     Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  type       MemberDocumentType
+  fileUrl    String
+  uploadedAt DateTime           @default(now())
+
+  @@index([memberId])
+  @@map("member_document")
+}
+
+enum InterestMethod {
+  Flat
+  ReducingBalance
+  Declining
+  Compound
+  Custom
+}
+
+model LoanProduct {
+  id                    String         @id @default(cuid())
+  name                  String
+  interestRate          Float
+  minAmount             Int
+  maxAmount             Int
+  repaymentPeriodMonths Int
+  gracePeriodDays       Int            @default(0)
+  penaltyRate           Float          @default(0)
+  processingFee         Float          @default(0)
+  insuranceFee          Float          @default(0)
+  lateFee               Float          @default(0)
+  serviceCharge         Float          @default(0)
+  interestMethod        InterestMethod @default(ReducingBalance)
+  isActive              Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  loanApplications LoanApplication[]
+
+  @@map("loan_product")
+}
+
+enum GuarantorStatus {
+  Active
+  Blocked
+}
+
+model Guarantor {
+  id                String           @id @default(cuid())
+  memberId          String
+  member            Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  loanApplicationId String?
+  loanApplication   LoanApplication? @relation(fields: [loanApplicationId], references: [id], onDelete: SetNull)
+  loanId            String?
+  loan              Loan?            @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  guaranteeAmount   Int
+  status            GuarantorStatus  @default(Active)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([memberId])
+  @@index([loanApplicationId])
+  @@index([loanId])
+  @@map("guarantor")
+}
+
+// Declared at application time (loanApplicationId); loanId is populated once
+// the application is disbursed and a Loan record exists.
+model Collateral {
+  id                String           @id @default(cuid())
+  loanApplicationId String?
+  loanApplication   LoanApplication? @relation(fields: [loanApplicationId], references: [id], onDelete: SetNull)
+  loanId            String?
+  loan              Loan?            @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  description       String
+  estimatedValue    Int
+  documentUrl       String?
+  createdAt         DateTime         @default(now())
+
+  @@index([loanApplicationId])
+  @@index([loanId])
+  @@map("collateral")
+}
+
+// ── Phase 3 — Loan Lifecycle & Approval Workflow ────────────────────────────
+
+enum ApplicationStatus {
+  PendingLoanOfficer
+  PendingSecretary
+  PendingTreasurer
+  PendingManager
+  PendingDisbursement
+  Disbursed
+  Rejected
+  Returned
+}
+
+enum LoanApplicationChannel {
+  Staff
+  MemberPortal
+}
+
+enum IdentificationType {
+  NationalId
+  Passport
+  VotersId
+  DriversLicense
+}
+
+enum NinVerificationStatus {
+  NotChecked
+  Matched
+  Mismatch
+  Unavailable
+}
+
+model LoanApplication {
+  id                     String            @id @default(cuid())
+  memberId               String
+  member                 Member            @relation(fields: [memberId], references: [id])
+  loanProductId          String
+  loanProduct            LoanProduct       @relation(fields: [loanProductId], references: [id])
+  amount                 Int
+  purpose                String
+  repaymentPeriodMonths  Int
+  interestMethod         InterestMethod
+  riskScore              Int               @default(0)
+  riskFlags              String[]          @default([])
+  status                 ApplicationStatus @default(PendingSecretary)
+  // Staff-prepared applications start at PendingSecretary and go through the
+  // full Secretary→Treasurer→Manager chain; member self-service submissions
+  // start at PendingLoanOfficer instead and skip straight to Manager after
+  // that (see lib/loan-workflow.ts) — a member has no Secretary to prepare
+  // on their behalf, but a Loan Officer must still vet the application.
+  channel                 LoanApplicationChannel @default(Staff)
+  preparedByUserId       String?
+  preparedBy             User?             @relation("PreparedApplications", fields: [preparedByUserId], references: [id])
+  submittedByMemberUserId String?
+  submittedByMemberUser   MemberUser?      @relation(fields: [submittedByMemberUserId], references: [id])
+  // Who clicked "Disburse" for a Mobile Money payout — the DGateway webhook
+  // that later confirms the payout runs with no staff session available, so
+  // this is what it uses for Loan.disbursedByUserId (previously reused
+  // preparedByUserId as a proxy, which broke once that became nullable).
+  disbursementInitiatedByUserId String?
+  disbursementInitiatedBy       User?      @relation("DisbursementInitiator", fields: [disbursementInitiatedByUserId], references: [id])
+  supportingDocumentUrls String[]          @default([])
+  // Set while a Mobile Money disbursement payout is in flight. The Loan row
+  // is only created once DGateway's webhook confirms — status stays
+  // PendingDisbursement until then, so a gateway failure never leaves a
+  // half-disbursed loan on the books.
+  disbursementTransactionRef String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  // Applicant profile captured at application time (KYC + capacity
+  // assessment) — kept optional at the DB level even though the create
+  // form requires ID fields going forward, so existing rows aren't broken.
+  idType             IdentificationType?
+  idNumber           String?
+  idIssueDate        DateTime?
+  idExpiryDate       DateTime?
+  applicantPhotoUrl  String?
+  dependents         Int?
+
+  // Government ID verification (NIRA NIN check for National ID applicants).
+  ninVerificationStatus NinVerificationStatus @default(NotChecked)
+  ninVerificationDetail String?
+  ninVerifiedAt         DateTime?
+  businessName       String?
+  businessAddress    String?
+  businessLocation   String?
+  businessPhone      String?
+  yearsInBusiness    Int?
+  businessCapital    Int?
+  businessMonthlyIncome Int?
+  employerName       String?
+  position           String?
+  yearsWithEmployer  Int?
+  employerPhone      String?
+  netMonthlyIncome   Int?
+
+  // Loan officer's document-verification + electronic sign-off, captured
+  // at application time — an attestation that supporting income evidence
+  // was physically/digitally reviewed before the application moves on.
+  officerVerifiedBusinessLetter Boolean  @default(false)
+  officerVerifiedPayslip        Boolean  @default(false)
+  officerSignatureData          String?
+  officerSignedAt               DateTime?
+
+  guarantors    Guarantor[]
+  collateral    Collateral[]
+  approvalSteps ApprovalStep[]
+  loan          Loan?
+
+  @@index([memberId])
+  @@index([status])
+  @@map("loan_application")
+}
+
+enum ApprovalStage {
+  LoanOfficer
+  Secretary
+  Treasurer
+  Manager
+  Disbursement
+}
+
+enum ApprovalAction {
+  Approve
+  Reject
+  Return
+}
+
+model ApprovalStep {
+  id                String          @id @default(cuid())
+  loanApplicationId String
+  loanApplication   LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+  stage             ApprovalStage
+  userId            String
+  user              User            @relation(fields: [userId], references: [id])
+  action            ApprovalAction
+  comments          String?
+  ipAddress         String?
+  createdAt         DateTime        @default(now())
+
+  @@index([loanApplicationId])
+  @@map("approval_step")
+}
+
+enum LoanStatus {
+  Active
+  PaidOff
+  Overdue
+  Defaulted
+}
+
+enum DisbursementMethod {
+  Cash
+  Bank
+  MobileMoney
+}
+
+model Loan {
+  id                    String             @id @default(cuid())
+  loanApplicationId     String             @unique
+  loanApplication       LoanApplication    @relation(fields: [loanApplicationId], references: [id])
+  memberId              String
+  member                Member             @relation(fields: [memberId], references: [id])
+  branchId              String
+  branch                Branch             @relation(fields: [branchId], references: [id])
+  principal             Int
+  interestRate           Float
+  interestMethod        InterestMethod
+  repaymentPeriodMonths Int
+  disbursedAt           DateTime           @default(now())
+  disbursedByUserId     String
+  disbursedBy           User               @relation("DisbursedLoans", fields: [disbursedByUserId], references: [id])
+  disbursementMethod    DisbursementMethod
+  status                LoanStatus         @default(Active)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  repayments    Repayment[]
+  guarantors    Guarantor[]
+  collateral    Collateral[]
+  recoveryCase  RecoveryCase?
+  notes         LoanNote[]
+
+  @@index([memberId])
+  @@index([branchId])
+  @@index([status])
+  @@map("loan")
+}
+
+model LoanNote {
+  id        String   @id @default(cuid())
+  loanId    String
+  loan      Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([loanId])
+  @@map("loan_note")
+}
+
+enum RepaymentMethod {
+  Cash
+  Bank
+  MobileMoney
+  Cheque
+  Online
+}
+
+enum RepaymentStatus {
+  Pending
+  Confirmed
+  Failed
+}
+
+enum RepaymentChannel {
+  Staff
+  MemberPortal
+}
+
+model Repayment {
+  id               String          @id @default(cuid())
+  loanId           String
+  loan             Loan            @relation(fields: [loanId], references: [id])
+  amountPaid       Int
+  principalPortion Int
+  interestPortion  Int
+  penaltyPortion   Int
+  method           RepaymentMethod
+  // Cash/Bank/Cheque/Online confirm immediately; MobileMoney starts Pending
+  // and only the DGateway webhook flips it to Confirmed — the loan balance
+  // must not move until that confirmation lands.
+  status           RepaymentStatus @default(Confirmed)
+  receiptNumber    String          @unique
+  transactionId    String?
+  // A repayment is either teller-recorded (collectorId set) or member
+  // self-service (memberUserId set, channel=MemberPortal) — mirrors
+  // SavingsTransaction's channel/memberUserId pattern exactly.
+  channel          RepaymentChannel @default(Staff)
+  collectorId      String?
+  collector        User?           @relation(fields: [collectorId], references: [id])
+  memberUserId     String?
+  memberUser       MemberUser?     @relation(fields: [memberUserId], references: [id])
+  branchId         String
+  branch           Branch          @relation(fields: [branchId], references: [id])
+  paidAt           DateTime        @default(now())
+
+  @@index([loanId])
+  @@map("repayment")
+}
+
+enum RecoveryStatus {
+  Active
+  Promised
+  Legal
+  Blacklisted
+  Recovered
+}
+
+model RecoveryCase {
+  id                String         @id @default(cuid())
+  loanId            String         @unique
+  loan              Loan           @relation(fields: [loanId], references: [id])
+  recoveryOfficerId String?
+  recoveryOfficer   User?          @relation(fields: [recoveryOfficerId], references: [id])
+  status            RecoveryStatus @default(Active)
+  notes             String?
+  visitDate         DateTime?
+  recoveredAmount   Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@map("recovery_case")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  browser    String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
+// ── Phase 4 — Savings, Accounting & Recovery ────────────────────────────────
+
+enum SavingsAccountType {
+  Daily
+  Fixed
+  Shares
+}
+
+model SavingsAccount {
+  id            String             @id @default(cuid())
+  accountNumber String             @unique
+  memberId      String
+  member        Member             @relation(fields: [memberId], references: [id])
+  type          SavingsAccountType
+  balance       Int                @default(0)
+  openedAt      DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  transactions SavingsTransaction[]
+
+  @@index([memberId])
+  @@map("savings_account")
+}
+
+enum SavingsTransactionType {
+  Deposit
+  Withdrawal
+  Interest
+}
+
+enum SavingsTransactionChannel {
+  Staff
+  MemberPortal
+}
+
+// Staff-recorded transactions settle immediately (Confirmed) — a teller has
+// already physically taken the cash/verified the transfer. Member
+// self-service ones default to Pending: Mobile Money waits for the DGateway
+// webhook (app/api/dgateway/webhook), Bank Transfer waits for a staff member
+// to check the bank statement and confirm it (app/api/savings-transactions/[id]/confirm).
+// Cash is never a member-portal method — you can't self-service a cash deposit.
+enum SavingsTransactionStatus {
+  Pending
+  Confirmed
+  Failed
+}
+
+enum SavingsTransactionMethod {
+  Cash
+  MobileMoney
+  BankTransfer
+}
+
+model SavingsTransaction {
+  id               String                 @id @default(cuid())
+  savingsAccountId String
+  savingsAccount   SavingsAccount         @relation(fields: [savingsAccountId], references: [id])
+  type             SavingsTransactionType
+  amount           Int
+  // The balance this transaction WILL produce once Confirmed — for a Pending
+  // row this is a projection, not yet applied to SavingsAccount.balance.
+  balanceAfter     Int
+  branchId         String
+  branch           Branch                 @relation(fields: [branchId], references: [id])
+  status           SavingsTransactionStatus @default(Confirmed)
+  method           SavingsTransactionMethod @default(Cash)
+  // DGateway transaction reference (Mobile Money) or the bank's own
+  // reference number the member typed in (Bank Transfer).
+  transactionId    String?
+  // A deposit is either teller-recorded (staffId set) or member self-service
+  // (memberUserId set, channel=MemberPortal) — never both. staffId is
+  // nullable specifically to allow the latter; the channel field is the
+  // authoritative way to tell them apart for audit/reporting.
+  channel          SavingsTransactionChannel @default(Staff)
+  staffId          String?
+  staff            User?                  @relation(fields: [staffId], references: [id])
+  memberUserId     String?
+  memberUser       MemberUser?            @relation(fields: [memberUserId], references: [id])
+  // Which staff member manually confirmed a Pending Bank Transfer deposit
+  // (Mobile Money is confirmed by the webhook instead, with no staff actor).
+  confirmedByUserId String?
+  confirmedBy       User?                 @relation("ConfirmedSavingsTransactions", fields: [confirmedByUserId], references: [id])
+  createdAt        DateTime               @default(now())
+
+  @@index([savingsAccountId])
+  @@map("savings_transaction")
+}
+
+enum AccountType {
+  Asset
+  Liability
+  Equity
+  Revenue
+  Expense
+}
+
+// A small seeded reference list, not a user-editable model — see
+// prisma/seed.ts. LedgerEntry.accountCode is a real FK against this so a
+// ledger line can never point at a nonexistent account.
+model ChartOfAccount {
+  code      String      @id
+  name      String
+  type      AccountType
+  createdAt DateTime    @default(now())
+
+  ledgerEntries LedgerEntry[]
+
+  @@map("chart_of_account")
+}
+
+model LedgerEntry {
+  id            String         @id @default(cuid())
+  accountCode   String
+  account       ChartOfAccount @relation(fields: [accountCode], references: [code])
+  description   String
+  debit         Int            @default(0)
+  credit        Int            @default(0)
+  branchId      String
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  // Traces this entry back to the business event that generated it
+  // (SavingsTransaction, Repayment, Loan, ...) — without this a ledger line
+  // can't be audited back to its source.
+  referenceType String?
+  referenceId   String?
+  createdAt     DateTime       @default(now())
+
+  @@index([accountCode])
+  @@index([branchId])
+  @@index([referenceType, referenceId])
+  @@map("ledger_entry")
+}

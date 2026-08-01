@@ -1,15 +1,27 @@
-import { Geist, Geist_Mono, Inter } from "next/font/google"
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google"
+import type { Metadata } from "next"
 
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { Providers } from "@/components/providers"
+import { cn } from "@/lib/utils"
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'})
+// Space Grotesk — a geometric, technical-leaning sans-serif in the same
+// spirit as the industrial/engineering-style "Metrology" font requested,
+// but legible at body-text sizes across the whole app (Google Fonts,
+// properly licensed for commercial use, self-hosted via next/font).
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-sans", display: "swap" })
 
-const fontMono = Geist_Mono({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+  display: "swap",
 })
+
+export const metadata: Metadata = {
+  title: "Nexcgen — Loans Management",
+  description:
+    "Enterprise-grade loan and savings management system for SACCOs, MFIs, and cooperative societies.",
+}
 
 export default function RootLayout({
   children,
@@ -19,11 +31,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      className={cn("antialiased", jetbrainsMono.variable, "font-sans", spaceGrotesk.variable)}
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", inter.variable)}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

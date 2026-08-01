@@ -7,6 +7,7 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
+    --font-mono: var(--font-mono);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -38,82 +39,170 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+
+    /* Nexcgen radius scale — design-style-guide.md §5 (rigid, do not derive via calc) */
+    --radius-sm: 0.5rem;    /* 8px  — inputs, small chips, tag pills */
+    --radius-md: 0.875rem;  /* 14px — medium cards, dropdown menus */
+    --radius-lg: 1.125rem;  /* 18px — main dashboard cards, table containers */
+    --radius-xl: 1.375rem;  /* 22px — modal outer shell, hero KPI cards */
+
+    /* Shadows — design-style-guide.md §6 */
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
+    --shadow-sm: 0 2px 6px 0 rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 6px 16px -2px rgba(0, 0, 0, 0.40);
+    --shadow-lg: 0 14px 30px -6px rgba(0, 0, 0, 0.45);
+    --shadow-xl: 0 24px 48px -12px rgba(0, 0, 0, 0.55);
+    --shadow-focus: 0 0 0 3px rgba(47, 111, 228, 0.25);
+
+    /* Accent (blue, from the Nexcgen logo) — mode-independent, design-style-guide.md §3 */
+    --color-accent-400: #5B93F0;
+    --color-accent-500: #2F6FE4;
+    --color-accent-600: #1D4FB8;
+
+    /* Brand palette — lifted from public/nexcgen.png (the people/heart mark
+       and "nexcgen" wordmark): blue (primary), green, orange, purple, plus
+       the deep navy used in the wordmark. Masthead/sidebar chrome stays
+       permanently dark in both themes (international banking-admin
+       convention); these are decorative brand accents, never functional/
+       status UI (use the semantic success/warning/error/info tokens for that). */
+    --brand-blue: #2F6FE4;
+    --brand-green: #4CAF50;
+    --brand-orange: #F5A623;
+    --brand-purple: #6A3093;
+    --brand-navy: #1B3A6B;
+    --brand-black: #0A0A0A;
+    --brand-charcoal: #141414;
+    /** Masthead title strip — same blue→green→orange→purple sequence as the
+     * logo's three figures and hand, left to right. */
+    --brand-gradient: linear-gradient(90deg, #2F6FE4 0%, #4CAF50 38%, #F5A623 68%, #6A3093 100%);
+    --sidebar-chrome-bg: #0B1220;
+    --sidebar-chrome-surface: #101828;
+    --sidebar-chrome-hover: #17233A;
+    --sidebar-chrome-border: #202D45;
+    --sidebar-chrome-fg: #FAFAFA;
+    --sidebar-chrome-fg-muted: #94A3C4;
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    /* Nexcgen — Light mode surfaces, design-style-guide.md §3 */
+    --background: #F7F7F5;        /* bg-canvas */
+    --foreground: #141414;        /* text-primary */
+    --card: #FFFFFF;               /* bg-card */
+    --card-foreground: #141414;
+    --popover: #FFFFFF;
+    --popover-foreground: #141414;
+    --primary: #141414;            /* primary button: black-on-white in light mode */
+    --primary-foreground: #FFFFFF;
+    --secondary: #F4F4F3;          /* bg-card-hover */
+    --secondary-foreground: #141414;
+    --muted: #F4F4F3;
+    --muted-foreground: #5C5C5C;   /* text-secondary */
+    --accent: #E9F0FD;             /* accent-soft */
+    --accent-foreground: #1D4FB8;  /* accent-600 */
+    --destructive: #D32F2F;        /* error-600 (light) */
+    --border: #DCE3F2;             /* border-subtle */
+    --input: #DCE3F2;
+    --ring: #2F6FE4;               /* accent-500 */
+    --chart-1: #2F6FE4;
+    --chart-2: #4CAF50;
+    --chart-3: #F5A623;
+    --chart-4: #6A3093;
+    --chart-5: #1B3A6B;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: #FFFFFF;             /* bg-surface */
+    --sidebar-foreground: #141414;
+    --sidebar-primary: #2F6FE4;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #F4F4F3;
+    --sidebar-accent-foreground: #141414;
+    --sidebar-border: #DCE3F2;
+    --sidebar-ring: #2F6FE4;
+
+    /* Named design tokens — design-style-guide.md §14 (referenced via bg-[--bg-card] etc.) */
+    --bg-canvas: #F7F7F5;
+    --bg-surface: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #F4F4F3;
+    --bg-input: #FFFFFF;
+    --border-subtle: #DCE3F2;
+    --border-strong: #B9C7E6;
+    --text-primary: #141414;
+    --text-secondary: #5C5C5C;
+    --text-muted: #9A9A9A;
+    --accent-soft: #E9F0FD;
+
+    /* Semantic — mode-scoped per §16 accessibility (contrast differs light vs dark) */
+    --success-600: #1A8A3D;
+    --success-soft: #EAF7EE;
+    --warning-600: #B8860B;
+    --warning-soft: #FDF6E3;
+    --error-600: #D32F2F;
+    --error-soft: #FDECEC;
+    --info-600: #2563EB;
+    --info-soft: #EAF1FD;
+
+    --font-mono: "JetBrains Mono", "Fira Code", monospace;
+    --sidebar-width: 260px;
+    --sidebar-collapsed-width: 72px;
+    --topbar-height: 68px;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    /* Nexcgen — Dark mode surfaces (default theme), design-style-guide.md §3 */
+    --background: #0A0A0A;         /* bg-canvas */
+    --foreground: #FAFAFA;         /* text-primary */
+    --card: #171717;                /* bg-card */
+    --card-foreground: #FAFAFA;
+    --popover: #171717;
+    --popover-foreground: #FAFAFA;
+    --primary: #FAFAFA;             /* primary button: white-on-black in dark mode */
+    --primary-foreground: #0A0A0A;
+    --secondary: #1D1D1D;           /* bg-card-hover */
+    --secondary-foreground: #FAFAFA;
+    --muted: #1D1D1D;
+    --muted-foreground: #A1A1A1;    /* text-secondary */
+    --accent: #101B29;              /* accent-soft */
+    --accent-foreground: #5B93F0;   /* accent-400 */
+    --destructive: #F0605A;         /* error-600 (dark) */
+    --border: #1E2A3D;              /* border-subtle */
+    --input: #1E2A3D;
+    --ring: #2F6FE4;                /* accent-500 */
+    --chart-1: #5B93F0;
+    --chart-2: #6DC172;
+    --chart-3: #F5A623;
+    --chart-4: #9463C2;
+    --chart-5: #7B9FD4;
+    --sidebar: #141414;              /* bg-surface */
+    --sidebar-foreground: #FAFAFA;
+    --sidebar-primary: #2F6FE4;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #1D1D1D;
+    --sidebar-accent-foreground: #FAFAFA;
+    --sidebar-border: #1E2A3D;
+    --sidebar-ring: #2F6FE4;
+
+    /* Named design tokens */
+    --bg-canvas: #0A0A0A;
+    --bg-surface: #141414;
+    --bg-card: #171717;
+    --bg-card-hover: #1D1D1D;
+    --bg-input: #1A1A1A;
+    --border-subtle: #1E2A3D;
+    --border-strong: #2A3B54;
+    --text-primary: #FAFAFA;
+    --text-secondary: #A1A1A1;
+    --text-muted: #6B6B6B;
+    --accent-soft: #101B29;
+
+    /* Semantic — dark values */
+    --success-600: #3FB950;
+    --success-soft: #122117;
+    --warning-600: #E3B341;
+    --warning-soft: #221D0F;
+    --error-600: #F0605A;
+    --error-soft: #241213;
+    --info-600: #5B9BF0;
+    --info-soft: #101B29;
 }
 
 @layer base {
@@ -126,4 +215,64 @@
   html {
     @apply font-sans;
     }
+}
+
+/* Layout-safety mechanics — design-style-guide.md §15 */
+html,
+body {
+  overflow-x: clip; /* both — one alone is not enough */
+}
+
+h1,
+h2,
+.display {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::selection { background: var(--accent-soft); color: var(--text-primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Brand gradient background — table headers + masthead. A plain Tailwind
+   bg-(--brand-gradient) class would set background-color to a gradient
+   value, which is invalid CSS; this needs the background shorthand. */
+.bg-brand-gradient {
+  background: var(--brand-gradient);
+}
+
+/* Gradient text — headline accents (landing page hero). */
+.text-brand-gradient {
+  background: var(--brand-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Fades the hero photo's own plain background into the page's plain
+   background at the left edge (where the photo's blank wall sits), so it
+   reads as part of the page rather than a bordered photo card on top of it. */
+.hero-photo-fade {
+  -webkit-mask-image: linear-gradient(to left, black 60%, transparent 100%);
+  mask-image: linear-gradient(to left, black 60%, transparent 100%);
 }
