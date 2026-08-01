@@ -39,7 +39,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { session, error } = await requireRole(["SuperAdmin", "Manager", "Cashier"]);
+  const { session, error } = await requireRole(["SuperAdmin", "Manager", "Cashier", "LoanOfficer"]);
   if (error) return error;
 
   const body = await req.json();
@@ -61,8 +61,48 @@ export async function POST(req: Request) {
     );
   }
 
-  const balanceAfter = type === "Deposit" ? account.balance + amount : account.balance - amount;
   const branchId = account.member.branchId;
+
+  // Cash deposits require a second staff member (SuperAdmin/Manager) to
+  // confirm before the balance moves — same maker-checker discipline
+  // already applied to member-declared Bank Transfers, closing the gap
+  // where the same teller who took the cash could also credit any amount
+  // to any account with no independent check. Withdrawals (staff physically
+  // hands cash back to a member who's standing there) and Deposit's
+  // eventual ledger posting both stay tied to the confirm step in
+  // app/api/savings-transactions/[id]/confirm/route.ts.
+  if (type === "Deposit") {
+    const projectedBalance = account.balance + amount;
+    const transaction = await db.savingsTransaction.create({
+      data: {
+        savingsAccountId,
+        type,
+        amount,
+        balanceAfter: projectedBalance,
+        branchId,
+        status: "Pending",
+        method: "Cash",
+        staffId: session.user.id,
+      },
+    });
+
+    await writeAuditLog({
+      userId: session.user.id,
+      action: "savings_transaction.cash_deposit_recorded",
+      entityType: "SavingsTransaction",
+      entityId: transaction.id,
+      newValue: { savingsAccountId, amount },
+      request: req,
+    });
+
+    await invalidateTag(tags.savings);
+    return NextResponse.json(
+      { status: "pending", message: "Cash deposit recorded — awaiting confirmation by a Manager or SuperAdmin.", transaction },
+      { status: 201 }
+    );
+  }
+
+  const balanceAfter = account.balance - amount;
 
   const [, transaction] = await db.$transaction([
     db.savingsAccount.update({ where: { id: savingsAccountId }, data: { balance: balanceAfter } }),

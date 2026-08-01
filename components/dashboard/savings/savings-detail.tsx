@@ -61,7 +61,15 @@ function OverviewRow({ label, value }: { label: string; value: React.ReactNode }
   )
 }
 
-export function SavingsDetail({ canTransact, accountId }: { canTransact: boolean; accountId: string }) {
+export function SavingsDetail({
+  canTransact,
+  canConfirm,
+  accountId,
+}: {
+  canTransact: boolean
+  canConfirm: boolean
+  accountId: string
+}) {
   const queryClient = useQueryClient()
   const [dialogType, setDialogType] = React.useState<"Deposit" | "Withdrawal" | null>(null)
   const [amount, setAmount] = React.useState<number | undefined>(undefined)
@@ -244,7 +252,7 @@ export function SavingsDetail({ canTransact, accountId }: { canTransact: boolean
           <div className="border-b border-(--border-subtle) px-5 py-3">
             <h4 className="text-[13px] font-semibold text-(--text-primary)">Pending confirmations</h4>
             <p className="mt-0.5 text-xs text-(--text-secondary)">
-              Member self-service deposits awaiting verification — the balance above does not include these yet.
+              Member self-service and teller-recorded cash deposits awaiting verification — the balance above does not include these yet.
             </p>
           </div>
           <div className="divide-y divide-(--border-subtle)">
@@ -252,13 +260,13 @@ export function SavingsDetail({ canTransact, accountId }: { canTransact: boolean
               <div key={t.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
                 <div>
                   <p className="text-(--text-primary)">
-                    {formatUGX(t.amount)} · {t.method === "MobileMoney" ? "Mobile Money" : "Bank Transfer"}
+                    {formatUGX(t.amount)} · {t.method === "MobileMoney" ? "Mobile Money" : t.method === "BankTransfer" ? "Bank Transfer" : "Cash"}
                   </p>
                   <p className="text-xs text-(--text-secondary)">
                     {collectedByLabel(t)} · {t.transactionId ?? "—"} · {new Date(t.createdAt).toLocaleString("en-UG")}
                   </p>
                 </div>
-                {t.method === "BankTransfer" && canTransact ? (
+                {(t.method === "BankTransfer" || t.method === "Cash") && canConfirm ? (
                   <div className="flex gap-2">
                     <Button
                       size="sm"
@@ -292,7 +300,7 @@ export function SavingsDetail({ canTransact, accountId }: { canTransact: boolean
                     </Button>
                   </div>
                 ) : (
-                  <StatusBadge status="Awaiting Mobile Money confirmation" tone="warning" />
+                  <StatusBadge status="Awaiting confirmation" tone="warning" />
                 )}
               </div>
             ))}

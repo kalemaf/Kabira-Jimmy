@@ -9,6 +9,7 @@ export default async function SavingsDetailPage({ params }: { params: Promise<{ 
   const session = await auth.api.getSession({ headers: await headers() });
   const role = (session!.user as { role?: StaffRole }).role ?? "LoanOfficer";
   const canTransact = ["SuperAdmin", "Manager", "Cashier"].includes(role);
+  const canConfirm = ["SuperAdmin", "Manager"].includes(role);
 
   return (
     <>
@@ -27,7 +28,7 @@ export default async function SavingsDetailPage({ params }: { params: Promise<{ 
         }}
       />
       <main className="flex-1 px-4 py-6 md:px-8">
-        <SavingsDetail accountId={id} canTransact={canTransact} />
+        <SavingsDetail accountId={id} canTransact={canTransact} canConfirm={canConfirm} />
       </main>
     </>
   );

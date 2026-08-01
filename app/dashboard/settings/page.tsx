@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { isDGatewayConfigured } from "@/lib/dgateway";
+import { isDGatewayConfigured, getWalletBalance } from "@/lib/dgateway";
 import { isSmsConfigured } from "@/lib/notifications";
 import { isNinVerificationConfigured } from "@/lib/nin-verification";
+import { formatUGX } from "@/lib/utils";
 import type { StaffRole } from "@/components/dashboard/nav-config";
 
 type IntegrationStatus = {
@@ -73,6 +74,7 @@ export default async function SettingsPage() {
 
   const integrations = getIntegrations();
   const configuredCount = integrations.filter((i) => i.configured).length;
+  const wallet = isDGatewayConfigured() ? await getWalletBalance() : null;
 
   return (
     <>
@@ -86,7 +88,29 @@ export default async function SettingsPage() {
           role: role!,
         }}
       />
-      <main className="flex-1 px-4 py-6 md:px-8">
+      <main className="flex-1 space-y-6 px-4 py-6 md:px-8">
+        {isDGatewayConfigured() ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>RohoPay wallet float</CardTitle>
+              <CardDescription>
+                The SACCO&apos;s own RohoPay merchant balance — what Mobile Money disbursements pay out of. RohoPay
+                only allows topping this up by logging into their dashboard directly; this app can only read it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {wallet ? (
+                <p className="font-mono text-2xl font-semibold tabular-nums text-(--text-primary)">
+                  {formatUGX(wallet.balance)}
+                </p>
+              ) : (
+                <p className="text-sm text-(--text-secondary)">
+                  Couldn&apos;t reach RohoPay to read the current balance — check the RohoPay dashboard directly.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
         <Card>
           <CardHeader>
             <CardTitle>Integrations</CardTitle>

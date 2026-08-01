@@ -105,13 +105,14 @@ export async function collectPayment(params: {
 /**
  * Pays out TO a member's mobile money wallet (loan disbursement).
  *
- * UNCONFIRMED: RohoPay's payout/disbursement endpoint path and response
- * field names could not be verified (docs 404'd — see file header). This
- * mirrors the confirmed /api/v1/collect shape as the most likely payout
- * convention. If this 404s in practice, that confirms the guess is wrong
- * and the endpoint needs correcting once real docs are obtained — it will
- * fail loudly (thrown error, loan stays undisbursed) rather than silently
- * marking a disbursement as sent.
+ * Endpoint path CONFIRMED via docs.rohopay.com/api-reference/overview:
+ * POST /api/v1/disburse, described there as "Send mobile money (live
+ * only)" — meaning RohoPay may reject disburse calls made with a test_
+ * key even in a sandbox context; only a live_ key can actually pay out.
+ * Request/response field names are still unconfirmed (mirrors the
+ * confirmed /api/v1/collect shape) — this fails loudly (thrown error,
+ * loan stays undisbursed) rather than silently marking a disbursement as
+ * sent if the shape guess is wrong.
  */
 export async function disburse(params: {
   phone: string;
@@ -124,7 +125,7 @@ export async function disburse(params: {
     throw new Error("RohoPay is not configured (set ROHO_API_URL and ROHO_API_KEY)");
   }
 
-  const data = await rohoPost(config, "/api/v1/payout", {
+  const data = await rohoPost(config, "/api/v1/disburse", {
     phone: params.phone,
     amount: params.amountUgx,
     currency: "UGX",
@@ -149,8 +150,9 @@ function normalizeStatus(raw: string | undefined): DGatewayTransactionStatus {
  * client-side poll loop) should stop after ~5 minutes and surface a
  * "still pending" state rather than polling forever.
  *
- * UNCONFIRMED endpoint path (docs 404'd) — mirrors the /api/v1/collect
- * convention with a GET lookup by reference.
+ * Endpoint path was a best-effort guess (docs 404'd) but VERIFIED WORKING
+ * live in production — used to recover a real member deposit that RohoPay
+ * had confirmed but our webhook never received.
  */
 export async function getTransactionStatus(reference: string): Promise<DGatewayResult> {
   const config = getConfig();
@@ -170,4 +172,32 @@ export async function getTransactionStatus(reference: string): Promise<DGatewayR
   const data = envelope?.data ?? envelope;
 
   return { transactionRef: reference, status: normalizeStatus(data?.status), message: data?.message };
+}
+
+export type WalletBalance = { balance: number; currency: string };
+
+/**
+ * The SACCO's own RohoPay merchant float — confirmed via
+ * docs.rohopay.com/api-reference/overview: GET /api/v1/wallet/balance
+ * (API-key auth). RohoPay's top-up endpoints are session-authenticated
+ * (only usable by a human logged into RohoPay's own dashboard), so this
+ * app can only ever READ the balance, never top it up automatically —
+ * surfaced on the Settings page so a SuperAdmin knows when to go top up
+ * the float manually before Mobile Money payouts start failing.
+ */
+export async function getWalletBalance(): Promise<WalletBalance | null> {
+  const config = getConfig();
+  if (!config) return null;
+
+  const res = await fetch(`${config.apiUrl}/api/v1/wallet/balance`, {
+    headers: { Authorization: `Bearer ${config.apiKey}` },
+  });
+  if (!res.ok) return null;
+
+  const envelope = await res.json().catch(() => ({}));
+  if (envelope?.success === false) return null;
+  const data = envelope?.data ?? envelope;
+  if (typeof data?.balance !== "number") return null;
+
+  return { balance: data.balance, currency: data.currency ?? "UGX" };
 }
