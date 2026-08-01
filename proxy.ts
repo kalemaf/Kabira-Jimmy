@@ -34,7 +34,7 @@ const SYSTEM_PREFIXES = ["/api/cron", "/api/dgateway/webhook"];
 // documents/selfie) — accept either cookie type rather than assuming staff.
 const SHARED_UPLOAD_PREFIXES = ["/api/r2/upload", "/api/local-upload"];
 
-export default async function middleware(req: NextRequest) {
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (API_AUTH_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
