@@ -4,6 +4,7 @@ import { getLinkedMemberId } from "@/lib/member-link-status";
 import { memberRepaymentSchema } from "@/lib/schemas/member-loan";
 import { generateAmortizationSchedule, computeOutstandingBreakdown, splitRepayment } from "@/lib/loan-calculator";
 import { collectPayment, isDGatewayConfigured } from "@/lib/dgateway";
+import { confirmRepayment } from "@/lib/payment-confirmation";
 import { writeAuditLog } from "@/lib/audit";
 import { invalidateTag, tags } from "@/lib/cache";
 import { NextResponse } from "next/server";
@@ -108,6 +109,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       newValue: { loanId: loan.id, amount, memberUserId: session.user.id, transactionRef: result.transactionRef },
       request: req,
     });
+
+    // RohoPay's collect call can already report the final outcome
+    // synchronously (see lib/dgateway.ts) rather than only via a later
+    // webhook — confirm right away when it does.
+    if (result.status === "successful") {
+      await confirmRepayment(result.transactionRef, req);
+      await invalidateTag(tags.repayments);
+      await invalidateTag(tags.loans);
+      return NextResponse.json({
+        status: "confirmed",
+        message: "Repayment successful — your loan balance has been updated.",
+        repayment,
+      });
+    }
 
     await invalidateTag(tags.repayments);
     await invalidateTag(tags.loans);

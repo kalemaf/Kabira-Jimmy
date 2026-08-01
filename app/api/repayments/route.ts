@@ -4,6 +4,7 @@ import { getCachedOrFetch, invalidateTag, tags } from "@/lib/cache";
 import { createRepaymentSchema } from "@/lib/schemas/repayment";
 import { generateAmortizationSchedule, computeOutstandingBreakdown, splitRepayment } from "@/lib/loan-calculator";
 import { collectPayment as dgatewayCollect } from "@/lib/dgateway";
+import { confirmRepayment } from "@/lib/payment-confirmation";
 import { postLedgerEntries, buildRepaymentLedgerLines, ACCOUNTS } from "@/lib/ledger";
 import { writeAuditLog } from "@/lib/audit";
 import { NextResponse } from "next/server";
@@ -132,6 +133,18 @@ export async function POST(req: Request) {
         newValue: { loanId, amountPaid, method, transactionRef: result.transactionRef },
         request: req,
       });
+
+      // RohoPay's collect call can already report the final outcome
+      // synchronously (see lib/dgateway.ts) rather than only via a later
+      // webhook — confirm right away when it does.
+      if (result.status === "successful") {
+        await confirmRepayment(result.transactionRef, req);
+        return NextResponse.json({
+          status: "confirmed",
+          message: "Mobile Money collection successful — the balance has been updated.",
+          repayment,
+        });
+      }
 
       return NextResponse.json({
         status: "pending",

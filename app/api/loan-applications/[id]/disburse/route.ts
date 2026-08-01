@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { disbursementSchema } from "@/lib/schemas/loan-application";
 import { STATUS_STAGE, canActAtStage } from "@/lib/loan-workflow";
 import { disburse as dgatewayDisburse } from "@/lib/dgateway";
+import { confirmDisbursement } from "@/lib/payment-confirmation";
 import { postLedgerEntries, ACCOUNTS } from "@/lib/ledger";
 import { notifyDisbursement } from "@/lib/notify";
 import type { StaffRole } from "@/components/dashboard/nav-config";
@@ -78,6 +79,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
 
       await invalidateTag(tags.loanApplications);
+
+      // RohoPay's payout call can already report the final outcome
+      // synchronously (see lib/dgateway.ts) rather than only via a later
+      // webhook — create the loan right away when it does.
+      if (result.status === "successful") {
+        const confirmResult = await confirmDisbursement(result.transactionRef, req);
+        if (confirmResult.ok) {
+          return NextResponse.json({
+            status: "disbursed",
+            message: "Mobile Money payout successful — the loan has been created.",
+            transactionRef: result.transactionRef,
+          });
+        }
+      }
+
       return NextResponse.json({
         status: "pending",
         message: "Mobile Money payout initiated — the loan will be created once DGateway confirms the transaction.",

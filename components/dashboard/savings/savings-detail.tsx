@@ -121,6 +121,27 @@ export function SavingsDetail({ canTransact, accountId }: { canTransact: boolean
     onSettled: () => setConfirmingId(null),
   })
 
+  const [reconcilingId, setReconcilingId] = React.useState<string | null>(null)
+  const reconcileMutation = useMutation({
+    mutationFn: async (id: string) => {
+      setReconcilingId(id)
+      const res = await fetch(`/api/savings-transactions/${id}/reconcile`, { method: "POST" })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? "Failed to check transaction status")
+      }
+      return res.json() as Promise<{ status: "confirmed" | "failed" | "pending"; message?: string }>
+    },
+    onSuccess: (data) => {
+      if (data.status === "confirmed") toast.success("RohoPay confirms this deposit succeeded — balance updated")
+      else if (data.status === "failed") toast.error("RohoPay reports this deposit failed")
+      else toast.info(data.message ?? "RohoPay still reports this as pending")
+      queryClient.invalidateQueries({ queryKey: ["savings-account", accountId] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+    onSettled: () => setReconcilingId(null),
+  })
+
   async function downloadPassbook() {
     if (!account) return
     setDownloading(true)
@@ -255,6 +276,19 @@ export function SavingsDetail({ canTransact, accountId }: { canTransact: boolean
                       onClick={() => confirmMutation.mutate({ id: t.id, action: "Confirm" })}
                     >
                       Confirm
+                    </Button>
+                  </div>
+                ) : t.method === "MobileMoney" && canTransact ? (
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status="Awaiting Mobile Money confirmation" tone="warning" />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={reconcilingId === t.id}
+                      disabled={reconcileMutation.isPending}
+                      onClick={() => reconcileMutation.mutate(t.id)}
+                    >
+                      Check with RohoPay
                     </Button>
                   </div>
                 ) : (

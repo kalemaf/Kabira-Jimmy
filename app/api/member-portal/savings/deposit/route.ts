@@ -3,6 +3,7 @@ import { memberAuth } from "@/lib/member-auth";
 import { getLinkedMemberId } from "@/lib/member-link-status";
 import { memberDepositSchema } from "@/lib/schemas/member-savings";
 import { collectPayment, isDGatewayConfigured } from "@/lib/dgateway";
+import { confirmSavingsDeposit } from "@/lib/payment-confirmation";
 import { writeAuditLog } from "@/lib/audit";
 import { invalidateTag, tags } from "@/lib/cache";
 import { NextResponse } from "next/server";
@@ -90,6 +91,21 @@ export async function POST(req: Request) {
         newValue: { savingsAccountId, amount, method, memberUserId: session.user.id, transactionRef: result.transactionRef },
         request: req,
       });
+
+      // RohoPay's collect call can already report the final outcome
+      // synchronously (see lib/dgateway.ts) rather than only via a later
+      // webhook — confirm right away when it does, instead of leaving the
+      // member staring at "Pending" for a webhook that may be delayed or
+      // never arrive.
+      if (result.status === "successful") {
+        await confirmSavingsDeposit(result.transactionRef, req);
+        await invalidateTag(tags.savings);
+        return NextResponse.json({
+          status: "confirmed",
+          message: "Deposit successful — your balance has been updated.",
+          transaction,
+        });
+      }
 
       await invalidateTag(tags.savings);
       return NextResponse.json({

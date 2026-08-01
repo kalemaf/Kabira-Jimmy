@@ -1,8 +1,11 @@
-import { db } from "@/lib/db";
-import { invalidateTag, tags } from "@/lib/cache";
-import { writeAuditLog } from "@/lib/audit";
-import { postLedgerEntries, buildRepaymentLedgerLines, buildSavingsLedgerLines, ACCOUNTS } from "@/lib/ledger";
-import { notifyDisbursement } from "@/lib/notify";
+import {
+  confirmSavingsDeposit,
+  failSavingsDeposit,
+  confirmRepayment,
+  failRepayment,
+  confirmDisbursement,
+  failDisbursement,
+} from "@/lib/payment-confirmation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createHmac, timingSafeEqual } from "crypto";
@@ -53,6 +56,18 @@ const webhookSchema = z.object({
     .optional(),
 });
 
+/**
+ * Async confirmation path for Mobile Money transactions. This is now the
+ * SECONDARY confirmation path — the primary one is the initiating route
+ * (savings deposit / repay / disburse) honoring RohoPay's own synchronous
+ * response status via lib/payment-confirmation.ts. This webhook exists for
+ * cases the synchronous response can't cover: the member takes longer than
+ * the request's lifetime to approve on their phone, a network blip loses
+ * the synchronous response after RohoPay already processed it, etc. Both
+ * paths call the same confirm/fail functions, which only ever act on a
+ * still-Pending record, so whichever arrives first "wins" and the second is
+ * a harmless no-op.
+ */
 export async function POST(req: Request) {
   // Fail CLOSED: this endpoint moves real money state (creates loans,
   // confirms repayments) — an unset secret must reject every request, not
@@ -73,207 +88,26 @@ export async function POST(req: Request) {
 
   const reference = parsed.data.data?.reference ?? parsed.data.data?.transaction_id ?? parsed.data.reference;
   const rawStatus = (parsed.data.status ?? parsed.data.data?.status ?? "").toLowerCase();
-  const status: "successful" | "failed" = ["successful", "success", "completed"].includes(rawStatus)
-    ? "successful"
-    : "failed";
+  const successful = ["successful", "success", "completed"].includes(rawStatus);
   const type: "collection" | "payout" =
     parsed.data.type ?? (parsed.data.event?.toLowerCase().includes("payout") ? "payout" : "collection");
 
   if (!reference) return NextResponse.json({ error: "Invalid webhook payload: missing reference" }, { status: 400 });
 
   if (type === "payout") {
-    const application = await db.loanApplication.findFirst({
-      where: { disbursementTransactionRef: reference },
-    });
-    if (!application) return NextResponse.json({ error: "No matching disbursement" }, { status: 404 });
-
-    if (status === "failed") {
-      await db.loanApplication.update({
-        where: { id: application.id },
-        data: { disbursementTransactionRef: null },
-      });
-      await writeAuditLog({
-        userId: null,
-        action: "loan_application.disbursement_failed_webhook",
-        entityType: "LoanApplication",
-        entityId: application.id,
-        newValue: { reference },
-        request: req,
-      });
-      await invalidateTag(tags.loanApplications);
-      return NextResponse.json({ acknowledged: true });
-    }
-
-    const member = await db.member.findUnique({ where: { id: application.memberId } });
-    const loanProduct = await db.loanProduct.findUnique({ where: { id: application.loanProductId } });
-    if (!member || !loanProduct) {
-      return NextResponse.json({ error: "Member or loan product no longer exists" }, { status: 409 });
-    }
-
-    // Whoever clicked "Disburse" to kick off this Mobile Money payout — this
-    // webhook runs with no staff session, so it can't fall back to "whoever
-    // is logged in right now" the way the Cash/Bank path does.
-    const disbursedByUserId = application.disbursementInitiatedByUserId ?? application.preparedByUserId;
-    if (!disbursedByUserId) {
-      return NextResponse.json({ error: "No staff member recorded for this disbursement" }, { status: 409 });
-    }
-
-    const [loan] = await db.$transaction([
-      db.loan.create({
-        data: {
-          loanApplicationId: application.id,
-          memberId: application.memberId,
-          branchId: member.branchId,
-          principal: application.amount,
-          interestRate: loanProduct.interestRate,
-          interestMethod: application.interestMethod,
-          repaymentPeriodMonths: application.repaymentPeriodMonths,
-          disbursedByUserId,
-          disbursementMethod: "MobileMoney",
-          status: "Active",
-        },
-      }),
-      db.loanApplication.update({ where: { id: application.id }, data: { status: "Disbursed" } }),
-    ]);
-
-    await Promise.all([
-      db.guarantor.updateMany({ where: { loanApplicationId: application.id }, data: { loanId: loan.id } }),
-      db.collateral.updateMany({ where: { loanApplicationId: application.id }, data: { loanId: loan.id } }),
-    ]);
-
-    await postLedgerEntries([
-      {
-        accountCode: ACCOUNTS.LOANS_RECEIVABLE,
-        description: `Loan disbursement (Mobile Money) — ${loan.id}`,
-        debit: application.amount,
-        branchId: member.branchId,
-        referenceType: "Loan",
-        referenceId: loan.id,
-      },
-      {
-        accountCode: ACCOUNTS.BANK,
-        description: `Loan disbursement (Mobile Money) — ${loan.id}`,
-        credit: application.amount,
-        branchId: member.branchId,
-        referenceType: "Loan",
-        referenceId: loan.id,
-      },
-    ]);
-
-    await writeAuditLog({
-      userId: null,
-      action: "loan_application.disbursement_confirmed_webhook",
-      entityType: "Loan",
-      entityId: loan.id,
-      newValue: { reference },
-      request: req,
-    });
-
-    await invalidateTag(tags.loanApplications);
-    await invalidateTag(tags.loans);
-    await invalidateTag(tags.guarantors);
-
-    await notifyDisbursement(
-      { name: `${member.firstName} ${member.lastName}`, email: member.email, phone: member.phone },
-      application.amount,
-      "MobileMoney"
-    );
-
-    return NextResponse.json({ acknowledged: true, loanId: loan.id });
+    const result = successful ? await confirmDisbursement(reference, req) : await failDisbursement(reference, req);
+    if (!result.ok) return NextResponse.json({ error: "No matching disbursement" }, { status: 404 });
+    return NextResponse.json({ acknowledged: true });
   }
 
   // A "collection" reference is either a loan repayment or a savings
-  // deposit — check savings first since its reference prefix (NGS-SDEP-) is
-  // distinct from a repayment's (NGS-MRPY-), but match by lookup either way
+  // deposit — try savings first (its reference prefix, NGS-SDEP-, is
+  // distinct from a repayment's NGS-MRPY-), but match by lookup either way
   // rather than trusting the prefix string.
-  const pendingSavingsTxn = await db.savingsTransaction.findFirst({
-    where: { transactionId: reference, status: "Pending" },
-    include: { savingsAccount: { include: { member: { select: { firstName: true, lastName: true, email: true, phone: true } } } } },
-  });
-  if (pendingSavingsTxn) {
-    if (status === "failed") {
-      await db.savingsTransaction.update({ where: { id: pendingSavingsTxn.id }, data: { status: "Failed" } });
-      await writeAuditLog({
-        userId: null,
-        action: "savings_transaction.member_deposit_failed_webhook",
-        entityType: "SavingsTransaction",
-        entityId: pendingSavingsTxn.id,
-        newValue: { reference },
-        request: req,
-      });
-      await invalidateTag(tags.savings);
-      return NextResponse.json({ acknowledged: true });
-    }
+  const savingsResult = successful ? await confirmSavingsDeposit(reference, req) : await failSavingsDeposit(reference, req);
+  if (savingsResult.ok) return NextResponse.json({ acknowledged: true });
 
-    await db.$transaction([
-      db.savingsTransaction.update({ where: { id: pendingSavingsTxn.id }, data: { status: "Confirmed" } }),
-      db.savingsAccount.update({
-        where: { id: pendingSavingsTxn.savingsAccountId },
-        data: { balance: { increment: pendingSavingsTxn.amount } },
-      }),
-    ]);
-
-    await postLedgerEntries(
-      buildSavingsLedgerLines(
-        {
-          id: pendingSavingsTxn.id,
-          referenceType: "SavingsTransaction",
-          description: `Member self-service deposit (Mobile Money) — ${pendingSavingsTxn.savingsAccountId}`,
-          type: "Deposit",
-          amount: pendingSavingsTxn.amount,
-          branchId: pendingSavingsTxn.branchId,
-        },
-        ACCOUNTS.BANK
-      )
-    );
-
-    await writeAuditLog({
-      userId: null,
-      action: "savings_transaction.member_deposit_confirmed_webhook",
-      entityType: "SavingsTransaction",
-      entityId: pendingSavingsTxn.id,
-      newValue: { reference, amount: pendingSavingsTxn.amount },
-      request: req,
-    });
-
-    await invalidateTag(tags.savings);
-    return NextResponse.json({ acknowledged: true, savingsTransactionId: pendingSavingsTxn.id });
-  }
-
-  // Repayment collection confirmation
-  const repayment = await db.repayment.findFirst({ where: { transactionId: reference } });
-  if (!repayment) return NextResponse.json({ error: "No matching repayment" }, { status: 404 });
-
-  await db.repayment.update({
-    where: { id: repayment.id },
-    data: { status: status === "successful" ? "Confirmed" : "Failed" },
-  });
-
-  if (status === "successful") {
-    const loan = await db.loan.findUnique({
-      where: { id: repayment.loanId },
-      include: { repayments: { where: { status: "Confirmed" } } },
-    });
-    if (loan) {
-      await postLedgerEntries(buildRepaymentLedgerLines(repayment, ACCOUNTS.BANK));
-
-      const totalRepaidPrincipal = loan.repayments.reduce((sum, r) => sum + r.principalPortion, 0);
-      if (totalRepaidPrincipal >= loan.principal) {
-        await db.loan.update({ where: { id: loan.id }, data: { status: "PaidOff" } });
-      }
-    }
-  }
-
-  await writeAuditLog({
-    userId: null,
-    action: status === "successful" ? "repayment.confirmed_webhook" : "repayment.failed_webhook",
-    entityType: "Repayment",
-    entityId: repayment.id,
-    newValue: { reference },
-    request: req,
-  });
-
-  await invalidateTag(tags.loans);
-  await invalidateTag(tags.repayments);
+  const repaymentResult = successful ? await confirmRepayment(reference, req) : await failRepayment(reference, req);
+  if (!repaymentResult.ok) return NextResponse.json({ error: "No matching transaction" }, { status: 404 });
   return NextResponse.json({ acknowledged: true });
 }

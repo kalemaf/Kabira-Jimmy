@@ -92,7 +92,14 @@ export async function collectPayment(params: {
     narration: params.narration ?? "Nexcgen loan repayment",
   });
 
-  return { transactionRef: extractReference(data, params.reference), status: "pending" };
+  // Confirmed live: RohoPay's /api/v1/collect response ALREADY carries the
+  // final status (data.status: "successful") for sandbox transactions,
+  // rather than always requiring an async webhook — likely because the
+  // request blocks until the member approves (or the attempt times out) on
+  // their phone. Honoring it here, instead of always forcing "pending", is
+  // what lets a caller confirm the balance/loan update in the same request
+  // instead of relying solely on a webhook that may never arrive.
+  return { transactionRef: extractReference(data, params.reference), status: normalizeStatus(data?.status) };
 }
 
 /**
@@ -125,7 +132,8 @@ export async function disburse(params: {
     narration: params.narration ?? "Nexcgen loan disbursement",
   });
 
-  return { transactionRef: extractReference(data, params.reference), status: "pending" };
+  // See collectPayment()'s comment — same reasoning applies to payouts.
+  return { transactionRef: extractReference(data, params.reference), status: normalizeStatus(data?.status) };
 }
 
 function normalizeStatus(raw: string | undefined): DGatewayTransactionStatus {
