@@ -10,63 +10,59 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createHmac, timingSafeEqual } from "crypto";
 
-// RohoPay confirms HMAC-SHA256 webhook signatures but docs.rohopay.com's
-// /guides/* pages (which would name the exact header + payload shape)
-// 404'd on every fetch attempt during this integration (see lib/dgateway.ts
-// header comment). This checks both commonly-used header names against an
-// HMAC-SHA256 of the raw body — if RohoPay uses a different header, every
-// real webhook will 401 (fails closed / loudly, never silently accepts an
-// unverified event) until the header name is corrected here.
-const SIGNATURE_HEADER_CANDIDATES = ["x-roho-signature", "x-webhook-signature", "x-signature"];
-
+// CONFIRMED via docs.rohopay.com/core-concepts/webhooks: header
+// "X-RohoPay-Signature", value format "sha256=<hex digest of the raw
+// request body>", secret from RohoPay Dashboard → Webhooks (must match
+// ROHO_WEBHOOK_SECRET exactly — it is NOT the same value as ROHO_API_KEY).
 function verifySignature(rawBody: string, headers: Headers): boolean {
   const secret = process.env.ROHO_WEBHOOK_SECRET;
   if (!secret) return false;
 
-  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
-  const expectedBuf = Buffer.from(expected, "utf8");
+  const provided = headers.get("x-rohopay-signature");
+  if (!provided || !provided.startsWith("sha256=")) return false;
 
-  for (const headerName of SIGNATURE_HEADER_CANDIDATES) {
-    const provided = headers.get(headerName);
-    if (!provided) continue;
-    const providedBuf = Buffer.from(provided, "utf8");
-    if (providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf)) {
-      return true;
-    }
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const providedBuf = Buffer.from(provided, "utf8");
+  return providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
+}
+
+// CONFIRMED payload shape (flat, not nested under `data`): event names are
+// "deposit.successful" / "deposit.failed" / "withdraw.successful" /
+// "withdraw.failed". Three different reference-shaped fields are present
+// (id, internal_reference, provider_reference) and docs don't say which one
+// matches what we stored as transactionRef from collectPayment()/disburse()
+// — so all three are tried in turn below rather than guessing one.
+const webhookSchema = z.object({
+  event: z.enum(["deposit.successful", "deposit.failed", "withdraw.successful", "withdraw.failed"]),
+  id: z.string().optional(),
+  internal_reference: z.string().optional(),
+  provider_reference: z.string().optional(),
+  status: z.string().optional(),
+});
+
+async function tryReferences(
+  candidates: (string | undefined)[],
+  confirmFn: (reference: string, req: Request) => Promise<{ ok: boolean }>,
+  req: Request
+): Promise<boolean> {
+  for (const ref of candidates) {
+    if (!ref) continue;
+    if ((await confirmFn(ref, req)).ok) return true;
   }
   return false;
 }
 
-// Payload field names are likewise unconfirmed (webhook docs 404'd), but
-// data.reference/data.transaction_id/data.status are CONFIRMED live as the
-// /api/v1/collect response's field names (see lib/dgateway.ts) — webhooks
-// most likely reuse the same {success,data,error} envelope and field names,
-// so those are checked first, with a flat top-level shape as a fallback.
-const webhookSchema = z.object({
-  reference: z.string().min(1).optional(),
-  status: z.string().min(1).optional(),
-  type: z.enum(["collection", "payout"]).optional(),
-  event: z.string().optional(),
-  data: z
-    .object({
-      reference: z.string().optional(),
-      transaction_id: z.string().optional(),
-      status: z.string().optional(),
-    })
-    .optional(),
-});
-
 /**
- * Async confirmation path for Mobile Money transactions. This is now the
- * SECONDARY confirmation path — the primary one is the initiating route
- * (savings deposit / repay / disburse) honoring RohoPay's own synchronous
- * response status via lib/payment-confirmation.ts. This webhook exists for
- * cases the synchronous response can't cover: the member takes longer than
- * the request's lifetime to approve on their phone, a network blip loses
- * the synchronous response after RohoPay already processed it, etc. Both
- * paths call the same confirm/fail functions, which only ever act on a
- * still-Pending record, so whichever arrives first "wins" and the second is
- * a harmless no-op.
+ * Async confirmation path for Mobile Money transactions — the primary path
+ * for real (non-sandbox) traffic. Live testing showed RohoPay's sandbox
+ * key returns the final status synchronously in the collect/disburse
+ * response, but a real transaction against production stays "pending"
+ * synchronously (the USSD/PIN prompt takes time) and only this webhook
+ * carries the final outcome. Both this webhook AND the synchronous-status
+ * path in the initiating routes call the same lib/payment-confirmation.ts
+ * functions, which only ever act on a still-Pending record — whichever
+ * arrives first "wins", the other is a harmless no-op.
  */
 export async function POST(req: Request) {
   // Fail CLOSED: this endpoint moves real money state (creates loans,
@@ -82,32 +78,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = JSON.parse(rawBody || "{}");
-  const parsed = webhookSchema.safeParse(body);
+  const parsed = webhookSchema.safeParse(JSON.parse(rawBody || "{}"));
   if (!parsed.success) return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
 
-  const reference = parsed.data.data?.reference ?? parsed.data.data?.transaction_id ?? parsed.data.reference;
-  const rawStatus = (parsed.data.status ?? parsed.data.data?.status ?? "").toLowerCase();
-  const successful = ["successful", "success", "completed"].includes(rawStatus);
-  const type: "collection" | "payout" =
-    parsed.data.type ?? (parsed.data.event?.toLowerCase().includes("payout") ? "payout" : "collection");
+  const { event, id, internal_reference, provider_reference } = parsed.data;
+  const candidates = [internal_reference, provider_reference, id];
+  const successful = event.endsWith(".successful");
 
-  if (!reference) return NextResponse.json({ error: "Invalid webhook payload: missing reference" }, { status: 400 });
-
-  if (type === "payout") {
-    const result = successful ? await confirmDisbursement(reference, req) : await failDisbursement(reference, req);
-    if (!result.ok) return NextResponse.json({ error: "No matching disbursement" }, { status: 404 });
+  if (event.startsWith("withdraw.")) {
+    const ok = await tryReferences(candidates, successful ? confirmDisbursement : failDisbursement, req);
+    if (!ok) return NextResponse.json({ error: "No matching disbursement" }, { status: 404 });
     return NextResponse.json({ acknowledged: true });
   }
 
-  // A "collection" reference is either a loan repayment or a savings
-  // deposit — try savings first (its reference prefix, NGS-SDEP-, is
-  // distinct from a repayment's NGS-MRPY-), but match by lookup either way
-  // rather than trusting the prefix string.
-  const savingsResult = successful ? await confirmSavingsDeposit(reference, req) : await failSavingsDeposit(reference, req);
-  if (savingsResult.ok) return NextResponse.json({ acknowledged: true });
-
-  const repaymentResult = successful ? await confirmRepayment(reference, req) : await failRepayment(reference, req);
-  if (!repaymentResult.ok) return NextResponse.json({ error: "No matching transaction" }, { status: 404 });
-  return NextResponse.json({ acknowledged: true });
+  // A "deposit." event is either a loan repayment collection or a savings
+  // deposit — try savings first, then repayment, across all candidate
+  // reference fields.
+  if (await tryReferences(candidates, successful ? confirmSavingsDeposit : failSavingsDeposit, req)) {
+    return NextResponse.json({ acknowledged: true });
+  }
+  if (await tryReferences(candidates, successful ? confirmRepayment : failRepayment, req)) {
+    return NextResponse.json({ acknowledged: true });
+  }
+  return NextResponse.json({ error: "No matching transaction" }, { status: 404 });
 }
