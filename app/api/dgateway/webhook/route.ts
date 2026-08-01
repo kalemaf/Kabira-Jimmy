@@ -5,36 +5,81 @@ import { postLedgerEntries, buildRepaymentLedgerLines, buildSavingsLedgerLines, 
 import { notifyDisbursement } from "@/lib/notify";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createHmac, timingSafeEqual } from "crypto";
 
-// Best-effort generic payload shape (see lib/dgateway.ts's header comment —
-// no dgateway-guide.md ships with this project). Swap the shared-secret
-// check below for DGateway's real signature scheme once their docs are
-// available — until then, a shared bearer secret is the minimum bar so
-// this endpoint can't be used to fabricate "payment successful" events.
+// RohoPay confirms HMAC-SHA256 webhook signatures but docs.rohopay.com's
+// /guides/* pages (which would name the exact header + payload shape)
+// 404'd on every fetch attempt during this integration (see lib/dgateway.ts
+// header comment). This checks both commonly-used header names against an
+// HMAC-SHA256 of the raw body — if RohoPay uses a different header, every
+// real webhook will 401 (fails closed / loudly, never silently accepts an
+// unverified event) until the header name is corrected here.
+const SIGNATURE_HEADER_CANDIDATES = ["x-roho-signature", "x-webhook-signature", "x-signature"];
+
+function verifySignature(rawBody: string, headers: Headers): boolean {
+  const secret = process.env.ROHO_WEBHOOK_SECRET;
+  if (!secret) return false;
+
+  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const expectedBuf = Buffer.from(expected, "utf8");
+
+  for (const headerName of SIGNATURE_HEADER_CANDIDATES) {
+    const provided = headers.get(headerName);
+    if (!provided) continue;
+    const providedBuf = Buffer.from(provided, "utf8");
+    if (providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Payload field names are likewise unconfirmed (webhook docs 404'd), but
+// data.reference/data.transaction_id/data.status are CONFIRMED live as the
+// /api/v1/collect response's field names (see lib/dgateway.ts) — webhooks
+// most likely reuse the same {success,data,error} envelope and field names,
+// so those are checked first, with a flat top-level shape as a fallback.
 const webhookSchema = z.object({
-  reference: z.string().min(1),
-  status: z.enum(["successful", "failed"]),
-  type: z.enum(["collection", "payout"]),
+  reference: z.string().min(1).optional(),
+  status: z.string().min(1).optional(),
+  type: z.enum(["collection", "payout"]).optional(),
+  event: z.string().optional(),
+  data: z
+    .object({
+      reference: z.string().optional(),
+      transaction_id: z.string().optional(),
+      status: z.string().optional(),
+    })
+    .optional(),
 });
 
 export async function POST(req: Request) {
   // Fail CLOSED: this endpoint moves real money state (creates loans,
   // confirms repayments) — an unset secret must reject every request, not
   // silently trust whatever is posted to it.
-  if (!process.env.DGATEWAY_WEBHOOK_SECRET) {
-    console.error("[dgateway/webhook] DGATEWAY_WEBHOOK_SECRET is not set — refusing all requests");
-    return NextResponse.json({ error: "Server misconfigured: DGATEWAY_WEBHOOK_SECRET not set" }, { status: 503 });
+  if (!process.env.ROHO_WEBHOOK_SECRET) {
+    console.error("[dgateway/webhook] ROHO_WEBHOOK_SECRET is not set — refusing all requests");
+    return NextResponse.json({ error: "Server misconfigured: ROHO_WEBHOOK_SECRET not set" }, { status: 503 });
   }
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.DGATEWAY_WEBHOOK_SECRET}`) {
+
+  const rawBody = await req.text();
+  if (!verifySignature(rawBody, req.headers)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => null);
+  const body = JSON.parse(rawBody || "{}");
   const parsed = webhookSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
 
-  const { reference, status, type } = parsed.data;
+  const reference = parsed.data.data?.reference ?? parsed.data.data?.transaction_id ?? parsed.data.reference;
+  const rawStatus = (parsed.data.status ?? parsed.data.data?.status ?? "").toLowerCase();
+  const status: "successful" | "failed" = ["successful", "success", "completed"].includes(rawStatus)
+    ? "successful"
+    : "failed";
+  const type: "collection" | "payout" =
+    parsed.data.type ?? (parsed.data.event?.toLowerCase().includes("payout") ? "payout" : "collection");
+
+  if (!reference) return NextResponse.json({ error: "Invalid webhook payload: missing reference" }, { status: 400 });
 
   if (type === "payout") {
     const application = await db.loanApplication.findFirst({
