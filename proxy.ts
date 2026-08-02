@@ -29,10 +29,17 @@ const ASSET_PREFIXES = ["/_next", "/favicon", "/images", "/illustrations"];
 // carry a browser session cookie — they authenticate themselves (CRON_SECRET
 // bearer token, webhook payload) inside the route handler instead.
 const SYSTEM_PREFIXES = ["/api/cron", "/api/dgateway/webhook"];
-// Object-storage upload endpoints are called by BOTH staff-side flows (loan
-// wizard, staff KYC) and member-portal self-service flows (loan application
-// documents/selfie) — accept either cookie type rather than assuming staff.
-const SHARED_UPLOAD_PREFIXES = ["/api/r2/upload", "/api/local-upload"];
+// Endpoints reachable by BOTH staff and member-portal sessions — the route
+// handler itself does the real authorization (e.g. a member can only
+// reconcile/view their OWN records), this just needs to let either cookie
+// type past the proxy instead of assuming staff-only and redirecting a
+// legitimately-signed-in member to the staff sign-in page.
+//  - /api/r2/upload, /api/local-upload: staff loan wizard/KYC uploads AND
+//    member-portal loan application document/selfie uploads.
+//  - /api/savings-transactions: staff-side deposit confirm (staff-only,
+//    enforced in-route) AND member self-service Mobile Money reconcile
+//    (member-scoped to their own transaction, enforced in-route).
+const DUAL_AUTH_PREFIXES = ["/api/r2/upload", "/api/local-upload", "/api/savings-transactions"];
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -42,7 +49,7 @@ export default async function proxy(req: NextRequest) {
   if (ASSET_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
   if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next();
 
-  if (SHARED_UPLOAD_PREFIXES.some((p) => pathname.startsWith(p))) {
+  if (DUAL_AUTH_PREFIXES.some((p) => pathname.startsWith(p))) {
     const hasStaffCookie = getSessionCookie(req);
     const hasMemberCookie = getSessionCookie(req, { cookiePrefix: MEMBER_COOKIE_PREFIX });
     if (!hasStaffCookie && !hasMemberCookie) {
