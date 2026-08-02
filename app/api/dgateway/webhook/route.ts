@@ -27,14 +27,17 @@ function verifySignature(rawBody: string, headers: Headers): boolean {
   return providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
 }
 
-// CONFIRMED payload shape (flat, not nested under `data`): event names are
-// "deposit.successful" / "deposit.failed" / "withdraw.successful" /
-// "withdraw.failed". Three different reference-shaped fields are present
-// (id, internal_reference, provider_reference) and docs don't say which one
-// matches what we stored as transactionRef from collectPayment()/disburse()
-// — so all three are tried in turn below rather than guessing one.
+// CONFIRMED payload shape (flat, not nested under `data`) — verified
+// against RohoPay's own dashboard webhook code sample (embeds the real
+// merchant webhook secret, matching ROHO_WEBHOOK_SECRET exactly): event
+// names are "deposit.successful" / "deposit.failed" / "withdraw.successful"
+// / "withdraw.failed", and the reference field is simply `reference` — NOT
+// internal_reference/provider_reference as an earlier docs-page scrape had
+// suggested. Those two are kept as fallbacks in case a real payload ever
+// omits `reference`, but `reference` is tried first.
 const webhookSchema = z.object({
   event: z.enum(["deposit.successful", "deposit.failed", "withdraw.successful", "withdraw.failed"]),
+  reference: z.string().optional(),
   id: z.string().optional(),
   internal_reference: z.string().optional(),
   provider_reference: z.string().optional(),
@@ -81,8 +84,8 @@ export async function POST(req: Request) {
   const parsed = webhookSchema.safeParse(JSON.parse(rawBody || "{}"));
   if (!parsed.success) return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
 
-  const { event, id, internal_reference, provider_reference } = parsed.data;
-  const candidates = [internal_reference, provider_reference, id];
+  const { event, reference, id, internal_reference, provider_reference } = parsed.data;
+  const candidates = [reference, internal_reference, provider_reference, id];
   const successful = event.endsWith(".successful");
 
   if (event.startsWith("withdraw.")) {
