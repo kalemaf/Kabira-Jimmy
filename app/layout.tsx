@@ -1,8 +1,9 @@
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 
 import "./globals.css"
 import { Providers } from "@/components/providers"
+import { PwaRegister } from "@/components/pwa-register"
 import { cn } from "@/lib/utils"
 
 // Space Grotesk — a geometric, technical-leaning sans-serif in the same
@@ -21,6 +22,16 @@ export const metadata: Metadata = {
   title: "Nexcgen — Loans Management",
   description:
     "Enterprise-grade loan and savings management system for SACCOs, MFIs, and cooperative societies.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Nexcgen",
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#2F6FE4",
 }
 
 export default function RootLayout({
@@ -36,6 +47,7 @@ export default function RootLayout({
     >
       <body>
         <Providers>{children}</Providers>
+        <PwaRegister />
       </body>
     </html>
   )
