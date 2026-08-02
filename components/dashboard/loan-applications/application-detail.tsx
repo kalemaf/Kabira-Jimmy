@@ -39,6 +39,7 @@ type ApplicationDetail = {
   riskFlags: string[]
   status: ApplicationStatus
   preparedByUserId: string | null
+  disbursementTransactionRef: string | null
   member: { id: string; firstName: string; lastName: string; memberNumber: string; phone: string }
   loanProduct: { name: string; interestRate: number };
   preparedBy: { id: string; name: string; email: string } | null
@@ -129,6 +130,30 @@ export function ApplicationDetail({
       } else {
         toast.success(result.status === "pending" ? "Mobile Money payout initiated" : "Disbursement recorded")
         queryClient.invalidateQueries({ queryKey: ["loan-application", applicationId] })
+      }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const reconcileMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/loan-applications/${applicationId}/reconcile`, { method: "POST" })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? "Failed to check with RohoPay")
+      }
+      return res.json() as Promise<{ status: "disbursed" | "failed" | "pending"; message?: string }>
+    },
+    onSuccess: (data) => {
+      if (data.status === "disbursed") {
+        toast.success("RohoPay confirms this payout succeeded — loan created")
+        queryClient.invalidateQueries({ queryKey: ["loan-application", applicationId] })
+        queryClient.invalidateQueries({ queryKey: ["loan-applications"] })
+      } else if (data.status === "failed") {
+        toast.error("RohoPay reports this payout failed")
+        queryClient.invalidateQueries({ queryKey: ["loan-application", applicationId] })
+      } else {
+        toast.info(data.message ?? "RohoPay still shows this as pending — try again shortly")
       }
     },
     onError: (err: Error) => toast.error(err.message),
@@ -292,7 +317,22 @@ export function ApplicationDetail({
         </div>
       ) : null}
 
-      {canAct && isDisbursementStage ? (
+      {canAct && isDisbursementStage && application.disbursementTransactionRef ? (
+        <div className="space-y-3 rounded-lg border border-(--border-subtle) bg-(--bg-card) p-6">
+          <h4 className="text-sm font-semibold text-(--text-primary)">Mobile Money payout in progress</h4>
+          <p className="text-sm text-(--text-secondary)">
+            A payout was already initiated for this loan and is awaiting confirmation — it cannot be
+            disbursed again. Check its real status with RohoPay instead.
+          </p>
+          <Button
+            variant="outline"
+            loading={reconcileMutation.isPending}
+            onClick={() => reconcileMutation.mutate()}
+          >
+            Check with RohoPay
+          </Button>
+        </div>
+      ) : canAct && isDisbursementStage ? (
         <div className="space-y-4 rounded-lg border border-(--border-subtle) bg-(--bg-card) p-6">
           <h4 className="text-sm font-semibold text-(--text-primary)">Disburse this loan</h4>
           <Select value={disbursementMethod} onValueChange={(v) => v && setDisbursementMethod(v as typeof disbursementMethod)}>

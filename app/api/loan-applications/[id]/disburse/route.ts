@@ -36,6 +36,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "This application is not awaiting disbursement" }, { status: 400 });
   }
 
+  // A Mobile Money payout already initiated (disbursementTransactionRef set)
+  // but not yet confirmed must never be disbursed a second time — use
+  // /reconcile to check RohoPay's real status instead of re-attempting a
+  // real payout.
+  if (application.disbursementTransactionRef) {
+    return NextResponse.json(
+      { error: "A Mobile Money payout for this application is already in progress — use \"Check with RohoPay\" to reconcile it instead of disbursing again." },
+      { status: 409 }
+    );
+  }
+
   const role = (session.user as { role?: StaffRole }).role;
   if (!role || !canActAtStage(role, "Disbursement")) {
     return NextResponse.json({ error: "Forbidden — only a Loan Officer or Cashier can disburse" }, { status: 403 });
