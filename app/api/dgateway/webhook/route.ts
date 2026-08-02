@@ -1,6 +1,8 @@
 import {
   confirmSavingsDeposit,
   failSavingsDeposit,
+  confirmSavingsWithdrawal,
+  failSavingsWithdrawal,
   confirmRepayment,
   failRepayment,
   confirmDisbursement,
@@ -88,17 +90,21 @@ export async function POST(req: Request) {
   const candidates = [internal_reference, reference, provider_reference, id];
   const successful = event.endsWith(".successful");
 
+  // A "withdraw." event is a payout FROM the SACCO's RohoPay wallet — either
+  // a loan disbursement or a member's savings withdrawal. Try both.
   if (event.startsWith("withdraw.")) {
-    const ok = await tryReferences(candidates, successful ? confirmDisbursement : failDisbursement, req);
-    if (!ok) {
-      // A valid, correctly-signed webhook from RohoPay that matches nothing
-      // in our database is either a reference-matching bug on our side or a
-      // transaction we have no record of — worth a human looking at either
-      // way, not just a 404 nobody sees.
-      await sendCriticalAlert("RohoPay webhook: no matching disbursement", { event, candidates });
-      return NextResponse.json({ error: "No matching disbursement" }, { status: 404 });
+    if (await tryReferences(candidates, successful ? confirmDisbursement : failDisbursement, req)) {
+      return NextResponse.json({ acknowledged: true });
     }
-    return NextResponse.json({ acknowledged: true });
+    if (await tryReferences(candidates, successful ? confirmSavingsWithdrawal : failSavingsWithdrawal, req)) {
+      return NextResponse.json({ acknowledged: true });
+    }
+    // A valid, correctly-signed webhook from RohoPay that matches nothing in
+    // our database is either a reference-matching bug on our side or a
+    // transaction we have no record of — worth a human looking at either
+    // way, not just a 404 nobody sees.
+    await sendCriticalAlert("RohoPay webhook: no matching payout", { event, candidates });
+    return NextResponse.json({ error: "No matching payout" }, { status: 404 });
   }
 
   // A "deposit." event is either a loan repayment collection or a savings

@@ -37,9 +37,10 @@ type SavingsDetailData = {
     amount: number
     balanceAfter: number
     createdAt: string
-    status: "Pending" | "Confirmed" | "Failed"
+    status: "PendingApproval" | "Pending" | "Confirmed" | "Failed"
     method: "Cash" | "MobileMoney" | "BankTransfer"
     transactionId: string | null
+    penaltyAmount: number
     staff: { name: string } | null
     memberUser: { name: string } | null
     confirmedBy: { name: string } | null
@@ -150,6 +151,31 @@ export function SavingsDetail({
     onSettled: () => setReconcilingId(null),
   })
 
+  const [approvingId, setApprovingId] = React.useState<string | null>(null)
+  const approveWithdrawalMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: "Approve" | "Reject" }) => {
+      setApprovingId(id)
+      const res = await fetch(`/api/savings-transactions/${id}/approve-withdrawal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? "Failed to update withdrawal")
+      }
+      return res.json() as Promise<{ status: string }>
+    },
+    onSuccess: (data, { action }) => {
+      if (action === "Reject") toast.success("Withdrawal rejected")
+      else if (data.status === "confirmed") toast.success("Withdrawal approved and paid out — balance updated")
+      else toast.success("Withdrawal approved — payout initiated")
+      queryClient.invalidateQueries({ queryKey: ["savings-account", accountId] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+    onSettled: () => setApprovingId(null),
+  })
+
   async function downloadPassbook() {
     if (!account) return
     setDownloading(true)
@@ -195,6 +221,7 @@ export function SavingsDetail({
   const deposits = confirmedTransactions.filter((t) => t.type === "Deposit").reduce((s, t) => s + t.amount, 0)
   const withdrawals = confirmedTransactions.filter((t) => t.type === "Withdrawal").reduce((s, t) => s + t.amount, 0)
   const pendingTransactions = account.transactions.filter((t) => t.status === "Pending")
+  const pendingApprovalWithdrawals = account.transactions.filter((t) => t.status === "PendingApproval")
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -246,6 +273,55 @@ export function SavingsDetail({
           <OverviewRow label="Current balance" value={<span className="font-mono font-semibold tabular-nums">{formatUGX(account.balance)}</span>} />
         </div>
       </div>
+
+      {pendingApprovalWithdrawals.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-(--error-600)/30 bg-(--error-soft)">
+          <div className="border-b border-(--error-600)/30 px-5 py-3">
+            <h4 className="text-[13px] font-semibold text-(--text-primary)">Withdrawals awaiting approval</h4>
+            <p className="mt-0.5 text-xs text-(--text-secondary)">
+              Above the automatic self-service limit — no payout has been sent yet. Approving sends the real Mobile Money payout immediately.
+            </p>
+          </div>
+          <div className="divide-y divide-(--border-subtle)">
+            {pendingApprovalWithdrawals.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+                <div>
+                  <p className="text-(--text-primary)">
+                    {formatUGX(t.amount)}
+                    {t.penaltyAmount > 0 ? ` (${formatUGX(t.penaltyAmount)} penalty — net ${formatUGX(t.amount - t.penaltyAmount)})` : ""}
+                  </p>
+                  <p className="text-xs text-(--text-secondary)">
+                    {collectedByLabel(t)} · {new Date(t.createdAt).toLocaleString("en-UG")}
+                  </p>
+                </div>
+                {canConfirm ? (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={approvingId === t.id && approveWithdrawalMutation.variables?.action === "Reject"}
+                      disabled={approveWithdrawalMutation.isPending}
+                      onClick={() => approveWithdrawalMutation.mutate({ id: t.id, action: "Reject" })}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      loading={approvingId === t.id && approveWithdrawalMutation.variables?.action === "Approve"}
+                      disabled={approveWithdrawalMutation.isPending}
+                      onClick={() => approveWithdrawalMutation.mutate({ id: t.id, action: "Approve" })}
+                    >
+                      Approve &amp; pay out
+                    </Button>
+                  </div>
+                ) : (
+                  <StatusBadge status="Awaiting approval" tone="error" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {pendingTransactions.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-(--border-subtle) bg-(--warning-soft)">
@@ -336,8 +412,8 @@ export function SavingsDetail({
                   <TableCell className="whitespace-normal">{collectedByLabel(t)}</TableCell>
                   <TableCell>
                     <StatusBadge
-                      status={t.status}
-                      tone={t.status === "Confirmed" ? "success" : t.status === "Pending" ? "warning" : "error"}
+                      status={t.status === "PendingApproval" ? "Awaiting approval" : t.status}
+                      tone={t.status === "Confirmed" ? "success" : t.status === "Pending" ? "warning" : t.status === "PendingApproval" ? "accent" : "error"}
                     />
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{formatUGX(t.amount)}</TableCell>

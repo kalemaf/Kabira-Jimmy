@@ -66,6 +66,17 @@ export async function notifyDisbursement(to: Recipient, amount: number, method: 
   ]);
 }
 
+export async function notifyWithdrawal(to: Recipient, amount: number, penaltyAmount: number) {
+  const amountStr = formatUGX(amount);
+  const note = penaltyAmount > 0 ? ` (includes a ${formatUGX(penaltyAmount)} early-withdrawal fee)` : "";
+  await Promise.all([
+    to.email
+      ? sendEmail(to.email, "Withdrawal confirmed", DisbursementConfirmationEmail({ memberName: to.name, amount: amountStr, method: "Mobile Money" }))
+      : Promise.resolve(),
+    sendSms(to.phone, `Nexcgen: Your withdrawal of ${amountStr}${note} has been sent to your Mobile Money. Thank you.`),
+  ]);
+}
+
 export async function notifyPenalty(to: Recipient, daysOverdue: number, penaltyDue: number) {
   const penaltyStr = formatUGX(penaltyDue);
   await Promise.all([

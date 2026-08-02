@@ -27,3 +27,21 @@ export const memberDepositSchema = z.discriminatedUnion("method", [
 ]);
 
 export type MemberDepositInput = z.infer<typeof memberDepositSchema>;
+
+// Deliberately no `phone` field — a withdrawal payout always goes to the
+// member's REGISTERED phone number on file (set by staff during KYC), never
+// a client-supplied one. Letting a member type in an arbitrary payout
+// number would be a real fraud vector: if their account were compromised,
+// an attacker could redirect withdrawals to a number they control. Deposits
+// (memberDepositSchema above) are the opposite risk profile — it's the
+// member's own money leaving their own pocket, so any number they control
+// is fine there.
+export const withdrawalOtpRequestSchema = z.object({
+  savingsAccountId: z.string().min(1, "Account is required"),
+  amount: z.number().int().min(1, "Amount must be positive"),
+});
+
+export const withdrawalConfirmSchema = z.object({
+  requestId: z.string().min(1),
+  code: z.string().length(6, "Enter the 6-digit code"),
+});

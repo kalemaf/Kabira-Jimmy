@@ -6,7 +6,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/dashboard/empty-state"
+import { MemberFreezeToggle } from "@/components/dashboard/members/member-freeze-toggle"
 import type { LoanDisplayStatus } from "@/lib/loan-status"
+import type { StaffRole } from "@/components/dashboard/nav-config"
 import { getInitials, formatUGX } from "@/lib/utils"
 import { format } from "date-fns"
 
@@ -67,6 +69,8 @@ type MemberDetail = {
   nextOfKinName: string | null
   nextOfKinPhone: string | null
   emergencyContact: string | null
+  withdrawalsFrozen: boolean
+  frozenReason: string | null
   branch: { id: string; name: string; code: string }
   documents: MemberDocument[]
   guarantors: Guarantor[]
@@ -91,7 +95,9 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
   )
 }
 
-export function MemberProfileTabs({ member }: { member: MemberDetail }) {
+export function MemberProfileTabs({ member, role }: { member: MemberDetail; role: StaffRole }) {
+  const canManageFreeze = role === "SuperAdmin" || role === "Manager"
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center gap-4 rounded-lg border border-(--border-subtle) bg-(--bg-card) p-6 sm:flex-row sm:items-start">
@@ -111,6 +117,9 @@ export function MemberProfileTabs({ member }: { member: MemberDetail }) {
             <span className="text-xs text-(--text-secondary)">{member.branch.name}</span>
           </div>
         </div>
+        {canManageFreeze ? (
+          <MemberFreezeToggle memberId={member.id} withdrawalsFrozen={member.withdrawalsFrozen} frozenReason={member.frozenReason} />
+        ) : null}
       </div>
 
       <Tabs defaultValue="summary">

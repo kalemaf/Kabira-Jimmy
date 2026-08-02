@@ -59,6 +59,7 @@ model User {
   auditLogs            AuditLog[]
   savingsTransactions  SavingsTransaction[]
   confirmedSavingsTransactions SavingsTransaction[] @relation("ConfirmedSavingsTransactions")
+  approvedSavingsTransactions  SavingsTransaction[] @relation("ApprovedSavingsTransactions")
   loanNotes            LoanNote[]
 
   @@index([branchId])
@@ -231,6 +232,13 @@ model Member {
   nextOfKinName    String?
   nextOfKinPhone   String?
   emergencyContact String?
+  // Withdrawal policy — "Freeze withdrawals for accounts under
+  // investigation": blocks every self-service withdrawal across all of this
+  // member's savings accounts (deposits/loans stay unaffected — this is
+  // scoped narrowly to what was asked for, not a general account lock).
+  withdrawalsFrozen Boolean   @default(false)
+  frozenReason      String?
+  frozenAt          DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -653,6 +661,11 @@ model SavingsAccount {
   type          SavingsAccountType
   balance       Int                @default(0)
   openedAt      DateTime           @default(now())
+  // Only meaningful for type=Fixed — funds are locked until this date (see
+  // lib/withdrawal-eligibility.ts). Null on a Fixed account is treated as
+  // "no lock enforced" rather than "always locked", since existing Fixed
+  // accounts predate this field and have no maturity date on record.
+  maturityDate  DateTime?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
@@ -680,6 +693,7 @@ enum SavingsTransactionChannel {
 // to check the bank statement and confirm it (app/api/savings-transactions/[id]/confirm).
 // Cash is never a member-portal method — you can't self-service a cash deposit.
 enum SavingsTransactionStatus {
+  PendingApproval
   Pending
   Confirmed
   Failed
@@ -697,6 +711,11 @@ model SavingsTransaction {
   savingsAccount   SavingsAccount         @relation(fields: [savingsAccountId], references: [id])
   type             SavingsTransactionType
   amount           Int
+  // Fixed-savings early-withdrawal penalty, if any (see
+  // lib/withdrawal-eligibility.ts) — the member's balance is still reduced
+  // by the full `amount`, but only `amount - penaltyAmount` is actually
+  // paid out; the penalty is retained by the SACCO as fee income.
+  penaltyAmount    Int                    @default(0)
   // The balance this transaction WILL produce once Confirmed — for a Pending
   // row this is a projection, not yet applied to SavingsAccount.balance.
   balanceAfter     Int
@@ -720,6 +739,14 @@ model SavingsTransaction {
   // (Mobile Money is confirmed by the webhook instead, with no staff actor).
   confirmedByUserId String?
   confirmedBy       User?                 @relation("ConfirmedSavingsTransactions", fields: [confirmedByUserId], references: [id])
+  // A self-service Withdrawal above the large-withdrawal threshold sits at
+  // status=PendingApproval (no payout has been sent to RohoPay yet) until a
+  // staff member approves it — only then does it move to Pending and the
+  // real payout goes out. Below the threshold, withdrawals skip straight to
+  // Pending like a normal collection/payout.
+  approvedByUserId String?
+  approvedBy       User?                  @relation("ApprovedSavingsTransactions", fields: [approvedByUserId], references: [id])
+  approvedAt       DateTime?
   createdAt        DateTime               @default(now())
 
   @@index([savingsAccountId])
@@ -768,4 +795,33 @@ model LedgerEntry {
   @@index([branchId])
   @@index([referenceType, referenceId])
   @@map("ledger_entry")
+}
+
+// Singleton row (id is always the fixed string below) — SuperAdmin-editable
+// withdrawal policy, see lib/withdrawal-policy.ts. Kept as one row rather
+// than scattered env vars/constants specifically because "Admin Controls"
+// (set daily limits, set the large-withdrawal approval threshold) is part
+// of the spec this implements — these need to be changeable without a code
+// deploy.
+model SystemSettings {
+  id String @id @default("singleton")
+
+  // Flexible (Daily) savings — minimum balance that must remain after a withdrawal.
+  minFlexibleSavingsBalance Int @default(30000)
+
+  // Fixed savings — early withdrawal (before maturityDate) handling.
+  fixedEarlyWithdrawalAllowed        Boolean @default(true)
+  fixedEarlyWithdrawalPenaltyPercent Float   @default(3)
+
+  // Per-member daily withdrawal caps, across all their savings accounts.
+  dailyWithdrawalAmountLimit Int @default(2000000)
+  maxWithdrawalsPerDay       Int @default(2)
+
+  // Withdrawals above this amount require staff approval before the real
+  // payout is sent; at or below it, they're processed automatically.
+  largeWithdrawalApprovalThreshold Int @default(5000000)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
 }

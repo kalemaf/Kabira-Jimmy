@@ -2,8 +2,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { invalidateTag, tags } from "@/lib/cache";
 import { writeAuditLog } from "@/lib/audit";
-import { postLedgerEntries, buildRepaymentLedgerLines, buildSavingsLedgerLines, ACCOUNTS } from "@/lib/ledger";
-import { notifyDisbursement } from "@/lib/notify";
+import { postLedgerEntries, buildRepaymentLedgerLines, buildSavingsLedgerLines, ACCOUNTS, type LedgerLine } from "@/lib/ledger";
+import { notifyDisbursement, notifyWithdrawal } from "@/lib/notify";
 
 /**
  * Confirms/fails Pending Mobile Money records by RohoPay transaction
@@ -26,11 +26,11 @@ type ConfirmResult = { ok: true; alreadyResolved?: boolean } | { ok: false; reas
 
 export async function confirmSavingsDeposit(reference: string, req?: Request): Promise<ConfirmResult> {
   const pending = await db.savingsTransaction.findFirst({
-    where: { transactionId: reference, status: "Pending" },
+    where: { transactionId: reference, status: "Pending", type: "Deposit" },
     include: { savingsAccount: { select: { accountNumber: true } } },
   });
   if (!pending) {
-    const alreadyResolved = await db.savingsTransaction.findFirst({ where: { transactionId: reference } });
+    const alreadyResolved = await db.savingsTransaction.findFirst({ where: { transactionId: reference, type: "Deposit" } });
     return alreadyResolved ? { ok: true, alreadyResolved: true } : { ok: false, reason: "not_found" };
   }
 
@@ -70,13 +70,109 @@ export async function confirmSavingsDeposit(reference: string, req?: Request): P
 }
 
 export async function failSavingsDeposit(reference: string, req?: Request): Promise<ConfirmResult> {
-  const pending = await db.savingsTransaction.findFirst({ where: { transactionId: reference, status: "Pending" } });
+  const pending = await db.savingsTransaction.findFirst({ where: { transactionId: reference, status: "Pending", type: "Deposit" } });
   if (!pending) return { ok: false, reason: "not_found" };
 
   await db.savingsTransaction.update({ where: { id: pending.id }, data: { status: "Failed" } });
   await writeAuditLog({
     userId: null,
     action: "savings_transaction.member_deposit_failed_webhook",
+    entityType: "SavingsTransaction",
+    entityId: pending.id,
+    newValue: { reference },
+    request: req,
+  });
+  await invalidateTag(tags.savings);
+  return { ok: true };
+}
+
+/**
+ * Confirms a Pending self-service Withdrawal once RohoPay reports the
+ * payout succeeded. The member's balance is reduced by the FULL amount
+ * (that's what left their savings), but only amount-penaltyAmount was
+ * actually sent to their phone — the penalty (if any, from an early Fixed
+ * withdrawal) is retained as SACCO fee income, posted as its own ledger
+ * line so the split is auditable.
+ */
+export async function confirmSavingsWithdrawal(reference: string, req?: Request): Promise<ConfirmResult> {
+  const pending = await db.savingsTransaction.findFirst({
+    where: { transactionId: reference, status: "Pending", type: "Withdrawal" },
+    include: { savingsAccount: { include: { member: { select: { firstName: true, lastName: true, email: true, phone: true } } } } },
+  });
+  if (!pending) {
+    const alreadyResolved = await db.savingsTransaction.findFirst({ where: { transactionId: reference, type: "Withdrawal" } });
+    return alreadyResolved ? { ok: true, alreadyResolved: true } : { ok: false, reason: "not_found" };
+  }
+
+  await db.$transaction([
+    db.savingsTransaction.update({ where: { id: pending.id }, data: { status: "Confirmed" } }),
+    db.savingsAccount.update({
+      where: { id: pending.savingsAccountId },
+      data: { balance: { decrement: pending.amount } },
+    }),
+  ]);
+
+  const netPayout = pending.amount - pending.penaltyAmount;
+  const ledgerLines: LedgerLine[] = [
+    {
+      accountCode: ACCOUNTS.SAVINGS_DEPOSITS,
+      description: `Member self-service withdrawal (Mobile Money) — ${pending.savingsAccount.accountNumber}`,
+      debit: pending.amount,
+      branchId: pending.branchId,
+      referenceType: "SavingsTransaction",
+      referenceId: pending.id,
+    },
+    {
+      accountCode: ACCOUNTS.BANK,
+      description: `Member self-service withdrawal (Mobile Money) — ${pending.savingsAccount.accountNumber}`,
+      credit: netPayout,
+      branchId: pending.branchId,
+      referenceType: "SavingsTransaction",
+      referenceId: pending.id,
+    },
+  ];
+  if (pending.penaltyAmount > 0) {
+    ledgerLines.push({
+      accountCode: ACCOUNTS.FEE_INCOME,
+      description: `Early withdrawal fee — ${pending.savingsAccount.accountNumber}`,
+      credit: pending.penaltyAmount,
+      branchId: pending.branchId,
+      referenceType: "SavingsTransaction",
+      referenceId: pending.id,
+    });
+  }
+  await postLedgerEntries(ledgerLines);
+
+  await writeAuditLog({
+    userId: null,
+    action: "savings_transaction.member_withdrawal_confirmed_webhook",
+    entityType: "SavingsTransaction",
+    entityId: pending.id,
+    newValue: { reference, amount: pending.amount, penaltyAmount: pending.penaltyAmount },
+    request: req,
+  });
+
+  await notifyWithdrawal(
+    { name: `${pending.savingsAccount.member.firstName} ${pending.savingsAccount.member.lastName}`, email: pending.savingsAccount.member.email, phone: pending.savingsAccount.member.phone },
+    pending.amount,
+    pending.penaltyAmount
+  );
+
+  await invalidateTag(tags.savings);
+  return { ok: true };
+}
+
+export async function failSavingsWithdrawal(reference: string, req?: Request): Promise<ConfirmResult> {
+  const pending = await db.savingsTransaction.findFirst({ where: { transactionId: reference, status: "Pending", type: "Withdrawal" } });
+  if (!pending) return { ok: false, reason: "not_found" };
+
+  // No balance change — the money never actually left (RohoPay reports the
+  // payout failed), so the amount was never really deducted in the first
+  // place beyond this Pending row's own projection.
+  await db.savingsTransaction.update({ where: { id: pending.id }, data: { status: "Failed" } });
+  await writeAuditLog({
+    userId: null,
+    action: "savings_transaction.member_withdrawal_failed_webhook",
     entityType: "SavingsTransaction",
     entityId: pending.id,
     newValue: { reference },

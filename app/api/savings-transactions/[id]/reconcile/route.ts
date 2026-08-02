@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/auth-guard";
 import { memberAuth } from "@/lib/member-auth";
 import { getLinkedMemberId } from "@/lib/member-link-status";
 import { getTransactionStatus } from "@/lib/dgateway";
-import { confirmSavingsDeposit, failSavingsDeposit } from "@/lib/payment-confirmation";
+import { confirmSavingsDeposit, failSavingsDeposit, confirmSavingsWithdrawal, failSavingsWithdrawal } from "@/lib/payment-confirmation";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 
@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: `This transaction is already ${transaction.status.toLowerCase()}` }, { status: 400 });
   }
   if (transaction.method !== "MobileMoney" || !transaction.transactionId) {
-    return NextResponse.json({ error: "Only Mobile Money deposits can be reconciled here" }, { status: 400 });
+    return NextResponse.json({ error: "Only Mobile Money transactions can be reconciled here" }, { status: 400 });
   }
 
   let gatewayStatus;
@@ -53,14 +53,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
+  const [confirmFn, failFn] =
+    transaction.type === "Withdrawal"
+      ? [confirmSavingsWithdrawal, failSavingsWithdrawal]
+      : [confirmSavingsDeposit, failSavingsDeposit];
+
   if (gatewayStatus.status === "successful") {
-    const result = await confirmSavingsDeposit(transaction.transactionId, req);
+    const result = await confirmFn(transaction.transactionId, req);
     if (!result.ok) return NextResponse.json({ error: "Transaction changed state — refresh and retry" }, { status: 409 });
     return NextResponse.json({ status: "confirmed" });
   }
 
   if (gatewayStatus.status === "failed") {
-    const result = await failSavingsDeposit(transaction.transactionId, req);
+    const result = await failFn(transaction.transactionId, req);
     if (!result.ok) return NextResponse.json({ error: "Transaction changed state — refresh and retry" }, { status: 409 });
     return NextResponse.json({ status: "failed" });
   }

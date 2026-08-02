@@ -65,6 +65,7 @@ export default async function MemberProfilePage({
       />
       <main className="flex-1 px-4 py-6 md:px-8">
         <MemberProfileTabs
+          role={role}
           member={{
             ...member,
             dob: member.dob?.toISOString() ?? null,

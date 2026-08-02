@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { isDGatewayConfigured, getWalletBalance } from "@/lib/dgateway";
 import { isSmsConfigured } from "@/lib/notifications";
 import { isNinVerificationConfigured } from "@/lib/nin-verification";
+import { WithdrawalPolicyForm } from "@/components/dashboard/settings/withdrawal-policy-form";
 import { formatUGX } from "@/lib/utils";
 import type { StaffRole } from "@/components/dashboard/nav-config";
 
@@ -111,6 +112,7 @@ export default async function SettingsPage() {
             </CardContent>
           </Card>
         ) : null}
+        <WithdrawalPolicyForm />
         <Card>
           <CardHeader>
             <CardTitle>Integrations</CardTitle>

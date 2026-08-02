@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { PiggyBank, Plus, Download } from "lucide-react"
+import { PiggyBank, Plus, Minus, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { StatusBadge } from "@/components/status-badge"
@@ -135,6 +135,15 @@ export function MemberSavingsClient() {
               <Button variant="outline" onClick={() => downloadStatement(account)} loading={downloadingId === account.id} className="gap-1.5">
                 <Download className="size-4" />
                 Statement
+              </Button>
+              <Button
+                variant="outline"
+                render={<Link href={`/member-portal/dashboard/savings/withdraw?accountId=${account.id}`} />}
+                nativeButton={false}
+                className="gap-1.5"
+              >
+                <Minus className="size-4" />
+                Withdraw
               </Button>
               <Button
                 render={<Link href={`/member-portal/dashboard/savings/deposit?accountId=${account.id}`} />}
