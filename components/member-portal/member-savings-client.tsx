@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { PiggyBank, Plus, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -37,6 +37,7 @@ type Response = { memberName: string; memberNumber: string; branchName: string; 
 
 export function MemberSavingsClient() {
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const { data: response, isLoading } = useQuery({
     queryKey: ["member-savings"],
@@ -46,6 +47,27 @@ export function MemberSavingsClient() {
       return res.json() as Promise<Response>
     },
     staleTime: 15_000,
+  })
+
+  const [reconcilingId, setReconcilingId] = React.useState<string | null>(null)
+  const reconcileMutation = useMutation({
+    mutationFn: async (id: string) => {
+      setReconcilingId(id)
+      const res = await fetch(`/api/savings-transactions/${id}/reconcile`, { method: "POST" })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? "Failed to check with RohoPay")
+      }
+      return res.json() as Promise<{ status: "confirmed" | "failed" | "pending"; message?: string }>
+    },
+    onSuccess: (data) => {
+      if (data.status === "confirmed") toast.success("RohoPay confirms this deposit succeeded — balance updated")
+      else if (data.status === "failed") toast.error("RohoPay reports this deposit failed")
+      else toast.info(data.message ?? "RohoPay still shows this as pending — try again shortly")
+      queryClient.invalidateQueries({ queryKey: ["member-savings"] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+    onSettled: () => setReconcilingId(null),
   })
 
   async function downloadStatement(account: SavingsAccount) {
@@ -163,7 +185,20 @@ export function MemberSavingsClient() {
                       {t.type === "Withdrawal" ? "-" : "+"}
                       {formatUGX(t.amount)}
                     </p>
-                    {t.status === "Pending" ? (
+                    {t.status === "Pending" && t.method === "MobileMoney" ? (
+                      <div className="flex flex-col items-end gap-1.5">
+                        <StatusBadge status="Pending confirmation" tone="warning" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={reconcilingId === t.id}
+                          disabled={reconcileMutation.isPending}
+                          onClick={() => reconcileMutation.mutate(t.id)}
+                        >
+                          Check with RohoPay
+                        </Button>
+                      </div>
+                    ) : t.status === "Pending" ? (
                       <StatusBadge status="Pending confirmation" tone="warning" />
                     ) : t.status === "Failed" ? (
                       <StatusBadge status="Failed" tone="error" />

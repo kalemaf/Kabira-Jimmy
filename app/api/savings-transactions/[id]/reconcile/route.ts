@@ -1,26 +1,40 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth-guard";
+import { memberAuth } from "@/lib/member-auth";
+import { getLinkedMemberId } from "@/lib/member-link-status";
 import { getTransactionStatus } from "@/lib/dgateway";
 import { confirmSavingsDeposit, failSavingsDeposit } from "@/lib/payment-confirmation";
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 
 /**
  * Re-checks a stuck Pending Mobile Money deposit directly against RohoPay,
  * for the case where neither the synchronous collect response nor the
- * async webhook ever confirmed it (e.g. a webhook that was never delivered
- * because RohoPay's dashboard has no webhook URL configured, or the
- * signature-header guess in app/api/dgateway/webhook/route.ts doesn't match
- * what RohoPay actually sends). Unlike the Bank Transfer confirm route,
- * this never lets a staff member vouch for the transaction themselves — it
- * only ever acts on what RohoPay itself reports for this reference.
+ * async webhook ever confirmed it (e.g. RohoPay's webhook delivery has been
+ * observed taking several minutes — sometimes longer). Unlike the Bank
+ * Transfer confirm route, this never lets anyone vouch for the transaction
+ * themselves — it only ever acts on what RohoPay itself reports for this
+ * reference, which is why it's safe to also let the member who owns the
+ * transaction trigger it (not just staff): a member can only ever get back
+ * whatever RohoPay's real API says, never fabricate a confirmation.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await requireRole(["SuperAdmin", "Manager", "Cashier"]);
-  if (error) return error;
-
   const { id } = await params;
-  const transaction = await db.savingsTransaction.findUnique({ where: { id } });
+  const transaction = await db.savingsTransaction.findUnique({
+    where: { id },
+    include: { savingsAccount: { select: { memberId: true } } },
+  });
   if (!transaction) return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+
+  const staffResult = await requireRole(["SuperAdmin", "Manager", "Cashier"]);
+  if (staffResult.error) {
+    const memberSession = await memberAuth.api.getSession({ headers: await headers() });
+    if (!memberSession) return staffResult.error;
+    const memberId = await getLinkedMemberId(memberSession.user.id);
+    if (!memberId || memberId !== transaction.savingsAccount.memberId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
 
   if (transaction.status !== "Pending") {
     return NextResponse.json({ error: `This transaction is already ${transaction.status.toLowerCase()}` }, { status: 400 });
