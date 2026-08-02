@@ -6,6 +6,7 @@ import {
   confirmDisbursement,
   failDisbursement,
 } from "@/lib/payment-confirmation";
+import { sendCriticalAlert } from "@/lib/alert";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createHmac, timingSafeEqual } from "crypto";
@@ -89,7 +90,14 @@ export async function POST(req: Request) {
 
   if (event.startsWith("withdraw.")) {
     const ok = await tryReferences(candidates, successful ? confirmDisbursement : failDisbursement, req);
-    if (!ok) return NextResponse.json({ error: "No matching disbursement" }, { status: 404 });
+    if (!ok) {
+      // A valid, correctly-signed webhook from RohoPay that matches nothing
+      // in our database is either a reference-matching bug on our side or a
+      // transaction we have no record of — worth a human looking at either
+      // way, not just a 404 nobody sees.
+      await sendCriticalAlert("RohoPay webhook: no matching disbursement", { event, candidates });
+      return NextResponse.json({ error: "No matching disbursement" }, { status: 404 });
+    }
     return NextResponse.json({ acknowledged: true });
   }
 
@@ -102,5 +110,6 @@ export async function POST(req: Request) {
   if (await tryReferences(candidates, successful ? confirmRepayment : failRepayment, req)) {
     return NextResponse.json({ acknowledged: true });
   }
+  await sendCriticalAlert("RohoPay webhook: no matching transaction", { event, candidates });
   return NextResponse.json({ error: "No matching transaction" }, { status: 404 });
 }

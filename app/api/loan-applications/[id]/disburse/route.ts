@@ -8,6 +8,7 @@ import { disburse as dgatewayDisburse } from "@/lib/dgateway";
 import { confirmDisbursement } from "@/lib/payment-confirmation";
 import { postLedgerEntries, ACCOUNTS } from "@/lib/ledger";
 import { notifyDisbursement } from "@/lib/notify";
+import { sendCriticalAlert } from "@/lib/alert";
 import type { StaffRole } from "@/components/dashboard/nav-config";
 import { NextResponse } from "next/server";
 
@@ -100,13 +101,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         transactionRef: result.transactionRef,
       });
     } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
       await writeAuditLog({
         userId: session.user.id,
         action: "loan_application.disbursement_failed",
         entityType: "LoanApplication",
         entityId: id,
-        newValue: { disbursementMethod, error: e instanceof Error ? e.message : "Unknown error" },
+        newValue: { disbursementMethod, error: message },
         request: req,
+      });
+      await sendCriticalAlert("Mobile Money loan disbursement failed", {
+        loanApplicationId: id,
+        member: `${application.member.firstName} ${application.member.lastName}`,
+        amount: application.amount,
+        initiatedBy: session.user.email,
+        error: message,
       });
       return NextResponse.json(
         { error: e instanceof Error ? e.message : "Mobile Money disbursement failed" },
