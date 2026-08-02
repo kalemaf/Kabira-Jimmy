@@ -110,7 +110,13 @@ export async function collectPayment(params: {
     amount: params.amountUgx,
     currency: "UGX",
     reference: params.reference,
-    narration: params.narration ?? "Nexcgen loan repayment",
+    // RohoPay's field is `description`, not `narration` (confirmed via
+    // their own /api/v1/collect example) — every prior transaction shows
+    // "Untitled transaction" in their ledger because `narration` was an
+    // unrecognized field they silently dropped. Kept as `narration` in
+    // this function's own params for callers, just sent under the right
+    // wire field name here.
+    description: params.narration ?? "Nexcgen loan repayment",
     callback_url: getCallbackUrl(),
   });
 
@@ -152,7 +158,7 @@ export async function disburse(params: {
     amount: params.amountUgx,
     currency: "UGX",
     reference: params.reference,
-    narration: params.narration ?? "Nexcgen loan disbursement",
+    description: params.narration ?? "Nexcgen loan disbursement",
     callback_url: getCallbackUrl(),
   });
 
