@@ -28,18 +28,17 @@ function verifySignature(rawBody: string, headers: Headers): boolean {
 }
 
 // CONFIRMED payload shape (flat, not nested under `data`) — verified
-// against RohoPay's own dashboard webhook code sample (embeds the real
-// merchant webhook secret, matching ROHO_WEBHOOK_SECRET exactly): event
-// names are "deposit.successful" / "deposit.failed" / "withdraw.successful"
-// / "withdraw.failed", and the reference field is simply `reference` — NOT
-// internal_reference/provider_reference as an earlier docs-page scrape had
-// suggested. Those two are kept as fallbacks in case a real payload ever
-// omits `reference`, but `reference` is tried first.
+// against RohoPay's own dashboard docs (docs-page scrape AND a dashboard
+// code sample both use `internal_reference`; one other code sample used a
+// plain `reference` instead). All candidate field names are tried against
+// pending records, in order, so this is correct regardless of which one a
+// real payload actually uses — the order below is just which is tried
+// first.
 const webhookSchema = z.object({
   event: z.enum(["deposit.successful", "deposit.failed", "withdraw.successful", "withdraw.failed"]),
+  internal_reference: z.string().optional(),
   reference: z.string().optional(),
   id: z.string().optional(),
-  internal_reference: z.string().optional(),
   provider_reference: z.string().optional(),
   status: z.string().optional(),
 });
@@ -84,8 +83,8 @@ export async function POST(req: Request) {
   const parsed = webhookSchema.safeParse(JSON.parse(rawBody || "{}"));
   if (!parsed.success) return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
 
-  const { event, reference, id, internal_reference, provider_reference } = parsed.data;
-  const candidates = [reference, internal_reference, provider_reference, id];
+  const { event, internal_reference, reference, id, provider_reference } = parsed.data;
+  const candidates = [internal_reference, reference, provider_reference, id];
   const successful = event.endsWith(".successful");
 
   if (event.startsWith("withdraw.")) {

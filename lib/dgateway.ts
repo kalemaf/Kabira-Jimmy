@@ -42,6 +42,27 @@ export function isDGatewayConfigured(): boolean {
   return getConfig() !== null;
 }
 
+// CRITICAL, confirmed via RohoPay's own dashboard (Developers → Webhooks):
+// RohoPay does NOT support a dashboard-configured global webhook URL — it
+// literally has nowhere to enter one. Instead: "Set a callback_url on each
+// payment request and RohoPay will POST to it automatically." Every prior
+// webhook fix in this file's git history was chasing signature/payload
+// details on a webhook that could never have been sent in the first place,
+// because collectPayment()/disburse() never included this field. Omitting
+// it is why every single Mobile Money transaction has needed manual
+// reconciliation via getTransactionStatus() instead of self-confirming.
+function getCallbackUrl(): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  // Fail loud rather than silently sending RohoPay a relative/empty
+  // callback_url — that would recreate the exact "webhook never arrives"
+  // bug this fixes, just one level removed (a garbage URL instead of no
+  // URL at all).
+  if (!base.startsWith("http")) {
+    throw new Error("NEXT_PUBLIC_APP_URL is not set to a full URL — RohoPay needs an absolute callback_url");
+  }
+  return `${base}/api/dgateway/webhook`;
+}
+
 // Confirmed live against a RohoPay sandbox (test_-prefixed) key: POST
 // /api/v1/collect returns {success, message, data: {reference,
 // transaction_id, status, amount, commission, net_amount, provider,
@@ -90,6 +111,7 @@ export async function collectPayment(params: {
     currency: "UGX",
     reference: params.reference,
     narration: params.narration ?? "Nexcgen loan repayment",
+    callback_url: getCallbackUrl(),
   });
 
   // Confirmed live: RohoPay's /api/v1/collect response ALREADY carries the
@@ -131,6 +153,7 @@ export async function disburse(params: {
     currency: "UGX",
     reference: params.reference,
     narration: params.narration ?? "Nexcgen loan disbursement",
+    callback_url: getCallbackUrl(),
   });
 
   // See collectPayment()'s comment — same reasoning applies to payouts.
