@@ -17,7 +17,11 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // static.cloudflareinsights.com: Cloudflare auto-injects its own
+      // analytics beacon script on domains proxied through it (the custom
+      // domain routes through Cloudflare) — not something this app adds
+      // itself, but it needs an explicit allowlist entry or the CSP blocks it.
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
