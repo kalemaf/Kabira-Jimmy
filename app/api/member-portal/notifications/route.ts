@@ -19,7 +19,7 @@ export async function GET() {
 
   const [savingsTxns, repayments] = await Promise.all([
     db.savingsTransaction.findMany({
-      where: { savingsAccount: { memberId } },
+      where: { savingsAccount: { memberId }, status: "Confirmed" },
       orderBy: { createdAt: "desc" },
       take: 10,
       select: { id: true, type: true, amount: true, createdAt: true },
