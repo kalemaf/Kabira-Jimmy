@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth-guard";
 import { getCachedOrFetch, tags } from "@/lib/cache";
-import { GUARANTOR_EXPOSURE_LIMIT_UGX, SAVINGS_TO_LOAN_RATIO } from "@/lib/loan-eligibility";
+import { getEligibilityPolicy } from "@/lib/eligibility-policy";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
@@ -15,6 +15,8 @@ export async function GET(req: Request) {
   const result = await getCachedOrFetch(
     cacheKey,
     async () => {
+      const { guarantorExposureLimitUgx: GUARANTOR_EXPOSURE_LIMIT_UGX, savingsToLoanRatio: SAVINGS_TO_LOAN_RATIO } =
+        await getEligibilityPolicy();
       const guarantors = await db.guarantor.findMany({
         include: {
           member: { select: { id: true, firstName: true, lastName: true, memberNumber: true, status: true } },

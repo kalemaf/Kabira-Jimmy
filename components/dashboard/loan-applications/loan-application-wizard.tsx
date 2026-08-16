@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Plus, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -32,7 +32,6 @@ import { useMemberOptions } from "@/hooks/use-member-options"
 import { useLoanProductOptions } from "@/hooks/use-loan-product-options"
 import { createLoanApplicationSchema, type CreateLoanApplicationInput } from "@/lib/schemas/loan-application"
 import { generateAmortizationSchedule, type InterestMethod } from "@/lib/loan-calculator"
-import { MAX_DEBT_TO_INCOME_RATIO } from "@/lib/eligibility-constants"
 import { formatUGX } from "@/lib/utils"
 
 const STEPS = [
@@ -55,6 +54,19 @@ export function LoanApplicationWizard() {
   const [step, setStep] = React.useState(1)
   const { options: memberOptions } = useMemberOptions()
   const { options: productOptions, products } = useLoanProductOptions()
+
+  const { data: eligibilityPolicy } = useQuery({
+    queryKey: ["eligibility-policy"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/eligibility-policy")
+      if (!res.ok) throw new Error("Failed to load eligibility policy")
+      return res.json() as Promise<{ maxDebtToIncomeRatio: number }>
+    },
+    staleTime: 5 * 60_000,
+  })
+  // SuperAdmin-configurable (Settings page) — this fallback only matters
+  // for the brief window before the query resolves.
+  const MAX_DEBT_TO_INCOME_RATIO = eligibilityPolicy?.maxDebtToIncomeRatio ?? 0.3
 
   const form = useForm<CreateLoanApplicationInput>({
     resolver: zodResolver(createLoanApplicationSchema),

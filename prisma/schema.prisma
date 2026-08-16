@@ -821,6 +821,15 @@ model SystemSettings {
   // payout is sent; at or below it, they're processed automatically.
   largeWithdrawalApprovalThreshold Int @default(5000000)
 
+  // Loan eligibility policy, see lib/eligibility-policy.ts. Previously
+  // hardcoded constants in lib/eligibility-constants.ts — moved here so a
+  // SuperAdmin can tune them without a code deploy. Stored as whole-number
+  // percentages (10 = 10%) for a friendlier admin form; ratio-form (0.1) is
+  // computed on read.
+  savingsToLoanRatioPercent   Float @default(10)
+  maxDebtToIncomeRatioPercent Float @default(30)
+  guarantorExposureLimitUgx   Int   @default(10000000)
+
   updatedAt DateTime @updatedAt
 
   @@map("system_settings")

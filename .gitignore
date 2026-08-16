@@ -42,3 +42,4 @@ next-env.d.ts
 # local file-upload fallback (dev-only, used when R2 credentials aren't set)
 /public/uploads/*
 !/public/uploads/.gitkeep
+.vercel

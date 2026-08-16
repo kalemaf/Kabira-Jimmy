@@ -1,8 +1,6 @@
 import { db } from "@/lib/db";
 import { generateAmortizationSchedule, type InterestMethod } from "@/lib/loan-calculator";
-import { MAX_DEBT_TO_INCOME_RATIO, SAVINGS_TO_LOAN_RATIO } from "@/lib/eligibility-constants";
-
-export { MAX_DEBT_TO_INCOME_RATIO, SAVINGS_TO_LOAN_RATIO };
+import { getEligibilityPolicy } from "@/lib/eligibility-policy";
 
 export type CheckResult = "pass" | "warn" | "fail" | "not_applicable";
 
@@ -43,6 +41,9 @@ export async function checkLoanEligibility(input: {
 }): Promise<EligibilityResult> {
   const flags: string[] = [];
   let riskScore = 0;
+
+  const { savingsToLoanRatio: SAVINGS_TO_LOAN_RATIO, maxDebtToIncomeRatio: MAX_DEBT_TO_INCOME_RATIO } =
+    await getEligibilityPolicy();
 
   const member = await db.member.findUnique({ where: { id: input.memberId } });
   if (!member) throw new Error("Member not found");
@@ -212,23 +213,17 @@ export async function getGuarantorExposure(memberId: string) {
 }
 
 /**
- * Placeholder cap on a single guarantor's cumulative guarantee exposure.
- * Until Savings (Phase 4) exists there's no real "available savings" figure
- * to check against, so this fixed UGX threshold stands in for it — replace
- * with a savings-balance-relative check once that module ships.
- */
-export const GUARANTOR_EXPOSURE_LIMIT_UGX = 10_000_000;
-
-/**
  * Re-evaluates every given member's total guarantee exposure and
- * auto-blocks (or unblocks) ALL their Guarantor records against
- * GUARANTOR_EXPOSURE_LIMIT_UGX. Called after any guarantee is added or
- * released so limits stay enforced without a manual review step.
+ * auto-blocks (or unblocks) ALL their Guarantor records against the
+ * SuperAdmin-configured guarantorExposureLimitUgx (see lib/eligibility-policy.ts).
+ * Called after any guarantee is added or released so limits stay enforced
+ * without a manual review step.
  */
 export async function enforceGuarantorLimits(memberIds: string[]): Promise<void> {
+  const { guarantorExposureLimitUgx } = await getEligibilityPolicy();
   for (const memberId of memberIds) {
     const { totalExposure } = await getGuarantorExposure(memberId);
-    const shouldBlock = totalExposure > GUARANTOR_EXPOSURE_LIMIT_UGX;
+    const shouldBlock = totalExposure > guarantorExposureLimitUgx;
 
     await db.guarantor.updateMany({
       where: { memberId },

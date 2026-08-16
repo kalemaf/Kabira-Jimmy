@@ -3,7 +3,7 @@ import { memberAuth } from "@/lib/member-auth";
 import { getLinkedMemberId } from "@/lib/member-link-status";
 import { generateAmortizationSchedule, computeOutstandingBreakdown } from "@/lib/loan-calculator";
 import { computeLoanDisplayStatus } from "@/lib/loan-status";
-import { SAVINGS_TO_LOAN_RATIO } from "@/lib/eligibility-constants";
+import { getEligibilityPolicy } from "@/lib/eligibility-policy";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 
@@ -117,7 +117,8 @@ export async function GET() {
     };
   }
 
-  const maxEligibleLoan = Math.round(totalSavingsBalance / SAVINGS_TO_LOAN_RATIO);
+  const { savingsToLoanRatio } = await getEligibilityPolicy();
+  const maxEligibleLoan = Math.round(totalSavingsBalance / savingsToLoanRatio);
 
   return NextResponse.json({
     member: {
@@ -134,6 +135,7 @@ export async function GET() {
     totalDepositsThisMonth,
     interestEarned,
     maxEligibleLoan,
+    savingsToLoanRatio,
     loan: loanSummary,
     monthlyDeposits,
     savingsGrowth,

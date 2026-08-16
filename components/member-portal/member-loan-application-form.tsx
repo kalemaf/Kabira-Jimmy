@@ -31,7 +31,6 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { memberLoanApplicationSchema, type MemberLoanApplicationInput } from "@/lib/schemas/member-loan-application"
-import { SAVINGS_TO_LOAN_RATIO } from "@/lib/eligibility-constants"
 import { formatUGX } from "@/lib/utils"
 
 type LoanProduct = {
@@ -91,10 +90,13 @@ export function MemberLoanApplicationForm() {
     queryFn: async () => {
       const res = await fetch("/api/member-portal/dashboard-summary")
       if (!res.ok) throw new Error("Failed to load")
-      return res.json() as Promise<{ totalSavingsBalance: number }>
+      return res.json() as Promise<{ totalSavingsBalance: number; savingsToLoanRatio: number }>
     },
     staleTime: 30_000,
   })
+  // SuperAdmin-configurable (Settings page) — this fallback only matters
+  // for the brief window before the query resolves.
+  const savingsToLoanRatio = dashboard?.savingsToLoanRatio ?? 0.1
 
   const form = useForm<MemberLoanApplicationInput>({
     resolver: zodResolver(memberLoanApplicationSchema),
@@ -128,7 +130,7 @@ export function MemberLoanApplicationForm() {
 
   const values = form.watch()
   const selectedProduct = products.find((p) => p.id === values.loanProductId)
-  const requiredSavings = Math.round((values.amount || 0) * SAVINGS_TO_LOAN_RATIO)
+  const requiredSavings = Math.round((values.amount || 0) * savingsToLoanRatio)
   const savingsOk = (dashboard?.totalSavingsBalance ?? 0) >= requiredSavings
 
   const mutation = useMutation({
@@ -213,7 +215,7 @@ export function MemberLoanApplicationForm() {
                     <CurrencyInput value={field.value} onChange={(v) => field.onChange(v ?? 0)} />
                   </FormControl>
                   <p className="text-xs text-(--text-secondary)">
-                    Needs savings of at least {formatUGX(requiredSavings)} ({SAVINGS_TO_LOAN_RATIO * 100}% of amount) —
+                    Needs savings of at least {formatUGX(requiredSavings)} ({savingsToLoanRatio * 100}% of amount) —
                     your current savings: {formatUGX(dashboard?.totalSavingsBalance ?? 0)}{" "}
                     {values.amount > 0 ? (savingsOk ? "✓" : "— below recommended") : ""}
                   </p>

@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getWithdrawalPolicy } from "@/lib/withdrawal-policy";
-import { SAVINGS_TO_LOAN_RATIO } from "@/lib/eligibility-constants";
+import { getEligibilityPolicy } from "@/lib/eligibility-policy";
 
 export type WithdrawalCheckResult =
   | {
@@ -46,6 +46,7 @@ export async function checkWithdrawalEligibility(params: {
 }): Promise<WithdrawalCheckResult> {
   const { savingsAccountId, amount } = params;
   const policy = await getWithdrawalPolicy();
+  const { savingsToLoanRatio: SAVINGS_TO_LOAN_RATIO } = await getEligibilityPolicy();
 
   const account = await db.savingsAccount.findUnique({
     where: { id: savingsAccountId },
