@@ -198,6 +198,31 @@ export async function confirmRepayment(reference: string, req?: Request): Promis
   if (loan) {
     await postLedgerEntries(buildRepaymentLedgerLines(repayment, ACCOUNTS.BANK));
 
+    // Mobile Money collection fee (see lib/repayment-fee-policy.ts) — extra
+    // cash RohoPay collected beyond amountPaid, never applied to the loan.
+    // Posted as its own balanced pair so buildRepaymentLedgerLines (also
+    // used by the fee-free Cash/Bank/Cheque/Online path) stays untouched.
+    if (repayment.collectionFeeAmount > 0) {
+      await postLedgerEntries([
+        {
+          accountCode: ACCOUNTS.BANK,
+          description: `Mobile Money collection fee — ${repayment.receiptNumber}`,
+          debit: repayment.collectionFeeAmount,
+          branchId: repayment.branchId,
+          referenceType: "Repayment",
+          referenceId: repayment.id,
+        },
+        {
+          accountCode: ACCOUNTS.FEE_INCOME,
+          description: `Mobile Money collection fee — ${repayment.receiptNumber}`,
+          credit: repayment.collectionFeeAmount,
+          branchId: repayment.branchId,
+          referenceType: "Repayment",
+          referenceId: repayment.id,
+        },
+      ]);
+    }
+
     const totalRepaidPrincipal = loan.repayments.reduce((sum, r) => sum + r.principalPortion, 0);
     if (totalRepaidPrincipal >= loan.principal) {
       await db.loan.update({ where: { id: loan.id }, data: { status: "PaidOff" } });

@@ -9,6 +9,7 @@ import { isSmsConfigured } from "@/lib/notifications";
 import { isNinVerificationConfigured } from "@/lib/nin-verification";
 import { WithdrawalPolicyForm } from "@/components/dashboard/settings/withdrawal-policy-form";
 import { EligibilityPolicyForm } from "@/components/dashboard/settings/eligibility-policy-form";
+import { RepaymentFeePolicyForm } from "@/components/dashboard/settings/repayment-fee-policy-form";
 import { formatUGX } from "@/lib/utils";
 import type { StaffRole } from "@/components/dashboard/nav-config";
 
@@ -115,6 +116,7 @@ export default async function SettingsPage() {
         ) : null}
         <WithdrawalPolicyForm />
         <EligibilityPolicyForm />
+        <RepaymentFeePolicyForm />
         <Card>
           <CardHeader>
             <CardTitle>Integrations</CardTitle>

@@ -580,6 +580,12 @@ model Repayment {
   principalPortion Int
   interestPortion  Int
   penaltyPortion   Int
+  // Staff-collected Mobile Money repayments charge the member amountPaid +
+  // this fee on top (see lib/repayment-fee-policy.ts) — the fee is never
+  // applied toward the loan, it's retained as SACCO fee income. Zero for
+  // every other method and for member self-service Mobile Money repayment
+  // (that flow was not asked to carry this fee).
+  collectionFeeAmount Int           @default(0)
   method           RepaymentMethod
   // Cash/Bank/Cheque/Online confirm immediately; MobileMoney starts Pending
   // and only the DGateway webhook flips it to Confirmed — the loan balance
@@ -829,6 +835,12 @@ model SystemSettings {
   savingsToLoanRatioPercent   Float @default(10)
   maxDebtToIncomeRatioPercent Float @default(30)
   guarantorExposureLimitUgx   Int   @default(10000000)
+
+  // Staff-collected Mobile Money loan repayments charge the member this
+  // much extra on top of what they owe (see lib/repayment-fee-policy.ts) —
+  // the RohoPay prompt shows amountOwed + fee, the fee is retained as
+  // SACCO fee income and never applied toward the loan balance.
+  mobileMoneyRepaymentFeePercent Float @default(20)
 
   updatedAt DateTime @updatedAt
 

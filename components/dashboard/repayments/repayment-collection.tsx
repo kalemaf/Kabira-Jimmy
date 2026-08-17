@@ -78,6 +78,21 @@ export function RepaymentCollection() {
   }, [selectedLoanId, form])
 
   const method = form.watch("method")
+  const amountPaid = form.watch("amountPaid")
+
+  const { data: feePolicy } = useQuery({
+    queryKey: ["repayment-fee-policy"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/repayment-fee-policy")
+      if (!res.ok) throw new Error("Failed to load fee policy")
+      return res.json() as Promise<{ mobileMoneyRepaymentFeePercent: number }>
+    },
+    staleTime: 5 * 60_000,
+    enabled: method === "MobileMoney",
+  })
+  const feePercent = feePolicy?.mobileMoneyRepaymentFeePercent ?? 20
+  const collectionFeeAmount = Math.round((amountPaid || 0) * (feePercent / 100))
+  const amountToCharge = (amountPaid || 0) + collectionFeeAmount
 
   const mutation = useMutation({
     mutationFn: async (values: CreateRepaymentInput) => {
@@ -95,10 +110,10 @@ export function RepaymentCollection() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["loan", selectedLoanId] })
       if (result.status === "pending") {
-        toast.success("Mobile Money collection initiated — awaiting confirmation")
+        toast.success(result.message ?? "Mobile Money collection initiated — awaiting confirmation")
         form.reset({ loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", transactionId: "" })
       } else {
-        toast.success("Repayment recorded")
+        toast.success(result.message ?? "Repayment recorded")
         setReceipt({ ...result.repayment, outstandingBalance: result.outstandingBalance });
         form.reset({ loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", transactionId: "" })
       }
@@ -225,22 +240,40 @@ export function RepaymentCollection() {
                   )}
                 />
                 {method === "MobileMoney" ? (
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone number</FormLabel>
-                        <FormControl>
-                          <PhoneInput value={field.value} onChange={field.onChange} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone number</FormLabel>
+                          <FormControl>
+                            <PhoneInput value={field.value} onChange={field.onChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {amountPaid > 0 ? (
+                      <div className="rounded-lg border border-(--border-subtle) bg-(--bg-card-hover) p-3 text-sm">
+                        <div className="flex justify-between text-(--text-secondary)">
+                          <span>Repayment</span>
+                          <span className="font-mono tabular-nums">{formatUGX(amountPaid)}</span>
+                        </div>
+                        <div className="flex justify-between text-(--text-secondary)">
+                          <span>Mobile Money fee ({feePercent}%)</span>
+                          <span className="font-mono tabular-nums">{formatUGX(collectionFeeAmount)}</span>
+                        </div>
+                        <div className="mt-1 flex justify-between border-t border-(--border-subtle) pt-1 font-medium text-(--text-primary)">
+                          <span>Prompt total</span>
+                          <span className="font-mono tabular-nums">{formatUGX(amountToCharge)}</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
                 <Button type="submit" className="w-full" loading={mutation.isPending}>
-                  Collect payment
+                  {method === "MobileMoney" ? "Send Mobile Money prompt" : "Collect payment"}
                 </Button>
               </form>
             </Form>

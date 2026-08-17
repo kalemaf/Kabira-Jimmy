@@ -5,6 +5,8 @@ import { createRepaymentSchema } from "@/lib/schemas/repayment";
 import { generateAmortizationSchedule, computeOutstandingBreakdown, splitRepayment } from "@/lib/loan-calculator";
 import { collectPayment as dgatewayCollect } from "@/lib/dgateway";
 import { confirmRepayment } from "@/lib/payment-confirmation";
+import { getMobileMoneyRepaymentFeePercent } from "@/lib/repayment-fee-policy";
+import { formatUGX } from "@/lib/utils";
 import { postLedgerEntries, buildRepaymentLedgerLines, ACCOUNTS } from "@/lib/ledger";
 import { writeAuditLog } from "@/lib/audit";
 import { NextResponse } from "next/server";
@@ -99,11 +101,21 @@ export async function POST(req: Request) {
   const receiptNumber = `RCT-${loan.branchId.slice(-4).toUpperCase()}-${Date.now()}`;
 
   if (method === "MobileMoney") {
+    // Staff-collected Mobile Money repayments charge the member a fee on
+    // top of what they actually owe (see lib/repayment-fee-policy.ts) —
+    // the RohoPay prompt the member approves shows amountPaid + fee, but
+    // only amountPaid is ever applied toward the loan; the fee is retained
+    // as SACCO fee income (posted separately once confirmed — see
+    // lib/payment-confirmation.ts's confirmRepayment).
+    const feePercent = await getMobileMoneyRepaymentFeePercent();
+    const collectionFeeAmount = Math.round(amountPaid * (feePercent / 100));
+    const amountToCharge = amountPaid + collectionFeeAmount;
+
     const reference = transactionId || `NGS-RPY-${loanId}-${Date.now()}`;
     try {
       const result = await dgatewayCollect({
         phone: phone!,
-        amountUgx: amountPaid,
+        amountUgx: amountToCharge,
         reference,
         narration: `Nexcgen loan repayment — ${loan.member.memberNumber}`,
       });
@@ -115,6 +127,7 @@ export async function POST(req: Request) {
           principalPortion,
           interestPortion,
           penaltyPortion,
+          collectionFeeAmount,
           method,
           status: "Pending",
           receiptNumber,
@@ -130,7 +143,7 @@ export async function POST(req: Request) {
         action: "repayment.initiated",
         entityType: "Repayment",
         entityId: repayment.id,
-        newValue: { loanId, amountPaid, method, transactionRef: result.transactionRef },
+        newValue: { loanId, amountPaid, collectionFeeAmount, amountCharged: amountToCharge, method, transactionRef: result.transactionRef },
         request: req,
       });
 
@@ -141,15 +154,19 @@ export async function POST(req: Request) {
         await confirmRepayment(result.transactionRef, req);
         return NextResponse.json({
           status: "confirmed",
-          message: "Mobile Money collection successful — the balance has been updated.",
+          message: `Mobile Money collection successful — UGX ${amountToCharge.toLocaleString()} charged (${formatUGX(amountPaid)} repayment + ${formatUGX(collectionFeeAmount)} Mobile Money fee). The balance has been updated.`,
           repayment,
+          amountCharged: amountToCharge,
+          collectionFeeAmount,
         });
       }
 
       return NextResponse.json({
         status: "pending",
-        message: "Mobile Money collection initiated — the balance will update once DGateway confirms.",
+        message: `Mobile Money collection initiated for UGX ${amountToCharge.toLocaleString()} (${formatUGX(amountPaid)} repayment + ${formatUGX(collectionFeeAmount)} fee) — the balance will update once confirmed.`,
         repayment,
+        amountCharged: amountToCharge,
+        collectionFeeAmount,
       });
     } catch (e) {
       return NextResponse.json(
