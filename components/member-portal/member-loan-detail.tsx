@@ -219,7 +219,7 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
                 <th className="border-r border-white/20 pl-5 text-left">#</th>
                 <th className="border-r border-white/20 text-left">Due date</th>
                 <th className="border-r border-white/20 text-right">Installment</th>
-                <th className="pr-5 text-right">Balance</th>
+                <th className="pr-5 text-right">Balance if paid on time</th>
               </tr>
             </thead>
             <tbody>

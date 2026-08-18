@@ -414,7 +414,7 @@ export function LoanDetail({ loanId }: { loanId: string }) {
                     <th className="border-r border-white/20 text-right">Principal</th>
                     <th className="border-r border-white/20 text-right">Interest</th>
                     <th className="border-r border-white/20 text-right">Instalment</th>
-                    <th className="pr-5 text-right">Balance</th>
+                    <th className="pr-5 text-right">Balance if paid on time</th>
                   </tr>
                 </thead>
                 <tbody>
