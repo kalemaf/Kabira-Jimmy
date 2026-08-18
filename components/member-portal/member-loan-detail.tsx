@@ -40,7 +40,14 @@ type LoanDetailData = {
     totalPayable: number
     monthlyInstallment: number | null
   }
-  outstanding: { principalDue: number; interestDue: number; penaltyDue: number; totalDue: number }
+  outstanding: {
+    principalDue: number
+    interestDue: number
+    penaltyDue: number
+    totalDue: number
+    principalPayable: number
+    interestPayable: number
+  }
   repayments: {
     id: string
     amountPaid: number
@@ -153,7 +160,13 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
   if (isLoading) return <div className="h-96 animate-pulse rounded-lg bg-(--bg-card)" />
   if (!loan) return <EmptyState icon={HandCoins} title="Loan not found" />
 
-  const canRepay = loan.outstanding.totalDue > 0
+  // Matches app/api/member-portal/loans/[id]/repay/route.ts's totalOwed
+  // exactly — the FULL remaining balance (principal + interest + any
+  // penalty), not just outstanding.totalDue, which only counts strictly
+  // overdue installments and would otherwise block paying early/anytime
+  // (before the next installment's due date) from the member portal.
+  const totalPayable = loan.outstanding.principalPayable + loan.outstanding.interestPayable + loan.outstanding.penaltyDue
+  const canRepay = totalPayable > 0
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -267,7 +280,7 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
           <DialogHeader>
             <DialogTitle>Repay via Mobile Money</DialogTitle>
             <DialogDescription>
-              Outstanding balance: {formatUGX(loan.outstanding.totalDue)}. You&apos;ll get a prompt on your phone to
+              Outstanding balance: {formatUGX(totalPayable)}. You&apos;ll get a prompt on your phone to
               approve the payment.
             </DialogDescription>
           </DialogHeader>
