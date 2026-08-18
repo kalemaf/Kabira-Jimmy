@@ -139,6 +139,27 @@ export function LoanDetail({ loanId }: { loanId: string }) {
     },
   })
 
+  const [reconcilingId, setReconcilingId] = React.useState<string | null>(null)
+  const reconcileMutation = useMutation({
+    mutationFn: async (id: string) => {
+      setReconcilingId(id)
+      const res = await fetch(`/api/repayments/${id}/reconcile`, { method: "POST" })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? "Failed to check repayment status")
+      }
+      return res.json() as Promise<{ status: "confirmed" | "failed" | "pending"; message?: string }>
+    },
+    onSuccess: (data) => {
+      if (data.status === "confirmed") toast.success("RohoPay confirms this repayment succeeded — balance updated")
+      else if (data.status === "failed") toast.error("RohoPay reports this repayment failed")
+      else toast.info(data.message ?? "RohoPay still reports this as pending")
+      queryClient.invalidateQueries({ queryKey: ["loan", loanId] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+    onSettled: () => setReconcilingId(null),
+  })
+
   const addNoteMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/loans/${loanId}/notes`, {
@@ -537,6 +558,17 @@ export function LoanDetail({ loanId }: { loanId: string }) {
                         >
                           <Download className="size-3.5" />
                           Receipt
+                        </Button>
+                      ) : null}
+                      {r.status === "Pending" && r.method === "MobileMoney" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          loading={reconcilingId === r.id}
+                          disabled={reconcileMutation.isPending}
+                          onClick={() => reconcileMutation.mutate(r.id)}
+                        >
+                          Check with RohoPay
                         </Button>
                       ) : null}
                       <div className="text-right">

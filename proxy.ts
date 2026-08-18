@@ -36,10 +36,11 @@ const SYSTEM_PREFIXES = ["/api/cron", "/api/dgateway/webhook"];
 // legitimately-signed-in member to the staff sign-in page.
 //  - /api/r2/upload, /api/local-upload: staff loan wizard/KYC uploads AND
 //    member-portal loan application document/selfie uploads.
-//  - /api/savings-transactions: staff-side deposit confirm (staff-only,
-//    enforced in-route) AND member self-service Mobile Money reconcile
-//    (member-scoped to their own transaction, enforced in-route).
-const DUAL_AUTH_PREFIXES = ["/api/r2/upload", "/api/local-upload", "/api/savings-transactions"];
+//  - /api/savings-transactions, /api/repayments: staff-side collection
+//    endpoints (staff-only, enforced in-route) AND member self-service
+//    Mobile Money reconcile (member-scoped to their own record, enforced
+//    in-route).
+const DUAL_AUTH_PREFIXES = ["/api/r2/upload", "/api/local-upload", "/api/savings-transactions", "/api/repayments"];
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

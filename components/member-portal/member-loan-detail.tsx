@@ -70,6 +70,27 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
     defaultValues: { amount: 0, phone: "" },
   })
 
+  const [reconcilingId, setReconcilingId] = React.useState<string | null>(null)
+  const reconcileMutation = useMutation({
+    mutationFn: async (id: string) => {
+      setReconcilingId(id)
+      const res = await fetch(`/api/repayments/${id}/reconcile`, { method: "POST" })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? "Failed to check repayment status")
+      }
+      return res.json() as Promise<{ status: "confirmed" | "failed" | "pending"; message?: string }>
+    },
+    onSuccess: (data) => {
+      if (data.status === "confirmed") toast.success("RohoPay confirms this payment succeeded — your balance is updated")
+      else if (data.status === "failed") toast.error("RohoPay reports this payment failed")
+      else toast.info(data.message ?? "RohoPay still reports this as pending — try again shortly")
+      queryClient.invalidateQueries({ queryKey: ["member-loan", loanId] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+    onSettled: () => setReconcilingId(null),
+  })
+
   const repayMutation = useMutation({
     mutationFn: async (values: MemberRepaymentInput) => {
       const res = await fetch(`/api/member-portal/loans/${loanId}/repay`, {
@@ -215,6 +236,18 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
                 <div>
                   <p className="text-(--text-primary)">{formatUGX(r.amountPaid)}</p>
                   <p className="text-xs text-(--text-secondary)">{r.method} · {r.receiptNumber}</p>
+                  {r.status === "Pending" && r.method === "MobileMoney" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      loading={reconcilingId === r.id}
+                      disabled={reconcileMutation.isPending}
+                      onClick={() => reconcileMutation.mutate(r.id)}
+                    >
+                      Check with RohoPay
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <StatusBadge
