@@ -98,20 +98,26 @@ export async function POST(req: Request) {
 
   const { email, nin, photoUrl, signatureUrl, ...rest } = parsed.data;
 
-  const created = await db.member.create({
-    data: {
-      ...rest,
-      email: email || null,
-      nin: nin || null,
-      photoUrl: photoUrl || null,
-      signatureUrl: signatureUrl || null,
-      memberNumber: `PENDING-${Date.now()}`,
-    },
-  });
+  // Two-step create-then-update — memberNumber isn't known until the row
+  // exists and sequenceNumber (DB-level autoincrement) is assigned. Wrapped
+  // in a transaction so a failure on the update step rolls back the create
+  // too, instead of stranding a permanent "PENDING-" placeholder row.
+  const member = await db.$transaction(async (tx) => {
+    const created = await tx.member.create({
+      data: {
+        ...rest,
+        email: email || null,
+        nin: nin || null,
+        photoUrl: photoUrl || null,
+        signatureUrl: signatureUrl || null,
+        memberNumber: `PENDING-${Date.now()}`,
+      },
+    });
 
-  const member = await db.member.update({
-    where: { id: created.id },
-    data: { memberNumber: `NGS-${String(created.sequenceNumber).padStart(6, "0")}` },
+    return tx.member.update({
+      where: { id: created.id },
+      data: { memberNumber: `NGS-${String(created.sequenceNumber).padStart(6, "0")}` },
+    });
   });
 
   await writeAuditLog({

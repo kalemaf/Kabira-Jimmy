@@ -81,13 +81,17 @@ export async function POST(req: Request) {
 
   // Two-step create-then-update — accountNumber isn't known until the row
   // exists and sequenceNumber (DB-level autoincrement) is assigned. Mirrors
-  // exactly how app/api/members/route.ts derives memberNumber.
-  const created = await db.savingsAccount.create({
-    data: { accountNumber: `PENDING-${Date.now()}`, memberId, type, balance: openingDeposit },
-  });
-  const account = await db.savingsAccount.update({
-    where: { id: created.id },
-    data: { accountNumber: `SAV-${String(created.sequenceNumber).padStart(6, "0")}` },
+  // exactly how app/api/members/route.ts derives memberNumber. Wrapped in a
+  // transaction so a failure on the update step rolls back the create too,
+  // instead of stranding a permanent "PENDING-" placeholder row.
+  const account = await db.$transaction(async (tx) => {
+    const created = await tx.savingsAccount.create({
+      data: { accountNumber: `PENDING-${Date.now()}`, memberId, type, balance: openingDeposit },
+    });
+    return tx.savingsAccount.update({
+      where: { id: created.id },
+      data: { accountNumber: `SAV-${String(created.sequenceNumber).padStart(6, "0")}` },
+    });
   });
 
   if (openingDeposit > 0) {
