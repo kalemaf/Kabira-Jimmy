@@ -79,11 +79,15 @@ export async function POST(req: Request) {
   const member = await db.member.findUnique({ where: { id: memberId } });
   if (!member) return NextResponse.json({ error: "Member not found" }, { status: 404 });
 
-  const count = await db.savingsAccount.count();
-  const accountNumber = `SAV-${String(count + 1).padStart(6, "0")}`;
-
-  const account = await db.savingsAccount.create({
-    data: { accountNumber, memberId, type, balance: openingDeposit },
+  // Two-step create-then-update — accountNumber isn't known until the row
+  // exists and sequenceNumber (DB-level autoincrement) is assigned. Mirrors
+  // exactly how app/api/members/route.ts derives memberNumber.
+  const created = await db.savingsAccount.create({
+    data: { accountNumber: `PENDING-${Date.now()}`, memberId, type, balance: openingDeposit },
+  });
+  const account = await db.savingsAccount.update({
+    where: { id: created.id },
+    data: { accountNumber: `SAV-${String(created.sequenceNumber).padStart(6, "0")}` },
   });
 
   if (openingDeposit > 0) {
@@ -102,7 +106,7 @@ export async function POST(req: Request) {
       buildSavingsLedgerLines({
         id: account.id,
         referenceType: "SavingsAccount",
-        description: `Opening deposit — ${accountNumber}`,
+        description: `Opening deposit — ${account.accountNumber}`,
         type: "Deposit",
         amount: openingDeposit,
         branchId: member.branchId,

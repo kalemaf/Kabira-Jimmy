@@ -660,8 +660,15 @@ enum SavingsAccountType {
 }
 
 model SavingsAccount {
-  id            String             @id @default(cuid())
-  accountNumber String             @unique
+  id             String             @id @default(cuid())
+  // DB-level autoincrement — accountNumber is derived from this once the
+  // row exists (see app/api/savings-accounts/route.ts), same two-step
+  // create-then-update pattern Member.sequenceNumber already uses for
+  // memberNumber. Deliberately NOT count(*)-based: that breaks the moment
+  // any account is ever deleted, since a lower count regenerates a number
+  // that still exists, colliding with accountNumber's unique constraint.
+  sequenceNumber Int                @default(autoincrement())
+  accountNumber  String             @unique
   memberId      String
   member        Member             @relation(fields: [memberId], references: [id])
   type          SavingsAccountType
