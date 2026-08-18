@@ -28,6 +28,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    // Explicit, not left to the library default — staff accounts can
+    // approve loans and disburse money, so a weak-password floor matters.
+    minPasswordLength: 10,
+    maxPasswordLength: 128,
     async sendResetPassword(data) {
       try {
         await sendResetPasswordEmail(data.user.email, data.url);
