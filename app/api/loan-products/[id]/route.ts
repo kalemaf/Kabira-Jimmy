@@ -23,7 +23,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const { id } = await params;
   const body = await req.json();
-  const parsed = loanProductSchema.partial().safeParse(body);
+  const parsed = loanProductSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   const product = await db.loanProduct.update({ where: { id }, data: parsed.data });

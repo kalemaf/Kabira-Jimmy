@@ -167,7 +167,8 @@ export function ApplicationDetail({
   const stage = STATUS_STAGE[application.status]
   const isPreparer = application.preparedByUserId === currentUserId
   const canAct = !!stage && canActAtStage(role, stage) && !isPreparer
-  const isApprovalStage = stage === "Secretary" || stage === "Treasurer" || stage === "Manager"
+  const isApprovalStage =
+    stage === "LoanOfficer" || stage === "Secretary" || stage === "Treasurer" || stage === "Manager"
   const isDisbursementStage = stage === "Disbursement"
 
   return (
