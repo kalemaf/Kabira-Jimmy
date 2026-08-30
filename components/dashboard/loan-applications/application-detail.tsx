@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { Check, X, Undo2, ShieldCheck, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -69,9 +70,12 @@ export function ApplicationDetail({
   const queryClient = useQueryClient()
   const [confirmAction, setConfirmAction] = React.useState<"Approve" | "Reject" | "Return" | null>(null)
   const [comments, setComments] = React.useState("")
-  const [disbursementMethod, setDisbursementMethod] = React.useState<"Cash" | "Bank" | "MobileMoney">("Cash")
+  const [disbursementMethod, setDisbursementMethod] = React.useState<"Cash" | "Bank" | "MobileMoney" | null>(null)
   const [phone, setPhone] = React.useState("")
   const [confirmDisburse, setConfirmDisburse] = React.useState(false)
+  const [confirmReverse, setConfirmReverse] = React.useState(false)
+  const [reverseReason, setReverseReason] = React.useState("")
+  const [attestedHandedOver, setAttestedHandedOver] = React.useState(false)
 
   const { data: application, isLoading } = useQuery({
     queryKey: ["loan-application", applicationId],
@@ -159,6 +163,29 @@ export function ApplicationDetail({
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const reverseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/loan-applications/${applicationId}/reverse-disbursement`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reverseReason.trim() }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error?.formErrors?.[0] ?? body.error ?? "Failed to reverse disbursement")
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      toast.success("Disbursement reversed — application returned to Pending disbursement")
+      setConfirmReverse(false)
+      setReverseReason("")
+      queryClient.invalidateQueries({ queryKey: ["loan-application", applicationId] })
+      queryClient.invalidateQueries({ queryKey: ["loan-applications"] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   if (isLoading) return <div className="h-96 animate-pulse rounded-lg bg-(--bg-card)" />
   if (!application) {
     return <EmptyState icon={FileText} title="Application not found" />
@@ -170,6 +197,8 @@ export function ApplicationDetail({
   const isApprovalStage =
     stage === "LoanOfficer" || stage === "Secretary" || stage === "Treasurer" || stage === "Manager"
   const isDisbursementStage = stage === "Disbursement"
+  const canReverse =
+    (role === "SuperAdmin" || role === "Manager") && application.status === "Disbursed" && !!application.loan
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -336,9 +365,16 @@ export function ApplicationDetail({
       ) : canAct && isDisbursementStage ? (
         <div className="space-y-4 rounded-lg border border-(--border-subtle) bg-(--bg-card) p-6">
           <h4 className="text-sm font-semibold text-(--text-primary)">Disburse this loan</h4>
-          <Select value={disbursementMethod} onValueChange={(v) => v && setDisbursementMethod(v as typeof disbursementMethod)}>
+          <Select
+            value={disbursementMethod ?? undefined}
+            onValueChange={(v) => {
+              if (!v) return
+              setDisbursementMethod(v as Exclude<typeof disbursementMethod, null>)
+              setAttestedHandedOver(false)
+            }}
+          >
             <SelectTrigger className="h-[42px] w-full rounded-sm border-(--border-subtle) px-3.5">
-              <SelectValue />
+              <SelectValue placeholder="Choose a disbursement method" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Cash">Cash</SelectItem>
@@ -349,8 +385,46 @@ export function ApplicationDetail({
           {disbursementMethod === "MobileMoney" ? (
             <PhoneInput value={phone} onChange={setPhone} />
           ) : null}
+          {disbursementMethod === "Cash" || disbursementMethod === "Bank" ? (
+            <label className="flex items-start gap-2 text-sm text-(--text-secondary)">
+              <Checkbox
+                checked={attestedHandedOver}
+                onCheckedChange={(v) => setAttestedHandedOver(!!v)}
+                className="mt-0.5"
+              />
+              {disbursementMethod === "Cash"
+                ? `I confirm ${formatUGX(application.amount)} in cash has already been physically handed to the member.`
+                : `I confirm ${formatUGX(application.amount)} has already been transferred to the member's bank account.`}
+            </label>
+          ) : null}
           <div className="flex justify-end">
-            <Button onClick={() => setConfirmDisburse(true)}>Disburse loan</Button>
+            <Button
+              disabled={
+                !disbursementMethod ||
+                (disbursementMethod === "MobileMoney" && !phone) ||
+                ((disbursementMethod === "Cash" || disbursementMethod === "Bank") && !attestedHandedOver)
+              }
+              onClick={() => setConfirmDisburse(true)}
+            >
+              Disburse loan
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {canReverse ? (
+        <div className="space-y-3 rounded-lg border border-(--warning-border) bg-(--warning-soft) p-6">
+          <h4 className="text-sm font-semibold text-(--text-primary)">Reverse this disbursement</h4>
+          <p className="text-sm text-(--text-secondary)">
+            Use this only if the member disputes receiving the funds, or the wrong method was confirmed by
+            mistake. This deletes the loan record, reverses the ledger entries, and returns the application
+            to Pending disbursement so it can be redone correctly. Only possible while no repayments have
+            been made against it.
+          </p>
+          <div className="flex justify-end">
+            <Button variant="destructive" onClick={() => setConfirmReverse(true)}>
+              Reverse disbursement
+            </Button>
           </div>
         </div>
       ) : null}
@@ -393,8 +467,9 @@ export function ApplicationDetail({
           <DialogHeader>
             <DialogTitle>Confirm disbursement</DialogTitle>
             <DialogDescription>
-              {formatUGX(application.amount)} will be disbursed via {disbursementMethod}. This cannot be
-              undone.
+              {disbursementMethod === "MobileMoney"
+                ? `${formatUGX(application.amount)} will be sent to ${phone} via Mobile Money. This cannot be undone.`
+                : `This records that ${formatUGX(application.amount)} was already handed to the member via ${disbursementMethod}. Only confirm if that has genuinely happened — this cannot be undone.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -403,6 +478,39 @@ export function ApplicationDetail({
             </Button>
             <Button loading={disburseMutation.isPending} onClick={() => disburseMutation.mutate()}>
               Confirm disbursement
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reverse disbursement confirmation */}
+      <Dialog open={confirmReverse} onOpenChange={(open) => { setConfirmReverse(open); if (!open) setReverseReason("") }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reverse this disbursement?</DialogTitle>
+            <DialogDescription>
+              This deletes the loan record and reverses its ledger entries. The application returns to
+              Pending disbursement. This cannot be undone and is permanently recorded in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              placeholder="Reason for reversal (required)"
+              value={reverseReason}
+              onChange={(e) => setReverseReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmReverse(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={reverseMutation.isPending}
+              disabled={reverseReason.trim().length < 10}
+              onClick={() => reverseMutation.mutate()}
+            >
+              Confirm reversal
             </Button>
           </DialogFooter>
         </DialogContent>
