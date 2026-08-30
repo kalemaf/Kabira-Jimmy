@@ -20,6 +20,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const application = await db.loanApplication.findUnique({ where: { id } });
   if (!application) return NextResponse.json({ error: "Application not found" }, { status: 404 });
 
+  // The async webhook can confirm the payout (see app/api/dgateway/webhook)
+  // in the gap between this page loading and someone clicking "Check with
+  // RohoPay" — that's not a client error, it's the best-case outcome, so
+  // report it the same way a successful reconcile would rather than a 400.
+  if (application.status === "Disbursed") {
+    return NextResponse.json({ status: "disbursed" });
+  }
+
   if (application.status !== "PendingDisbursement" || !application.disbursementTransactionRef) {
     return NextResponse.json(
       { error: "This application has no pending Mobile Money disbursement to reconcile" },

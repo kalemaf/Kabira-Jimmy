@@ -84,6 +84,14 @@ export function ApplicationDetail({
       if (!res.ok) throw new Error("Failed to load application")
       return res.json() as Promise<ApplicationDetail>
     },
+    // A Mobile Money payout can be confirmed by RohoPay's webhook seconds
+    // after this page loads, with nothing on screen to trigger a refetch —
+    // poll while one might be in flight so "payout in progress" clears
+    // itself instead of needing a manual "Check with RohoPay" click.
+    refetchInterval: (query) =>
+      query.state.data?.status === "PendingDisbursement" && query.state.data?.disbursementTransactionRef
+        ? 5000
+        : false,
   })
 
   const approveMutation = useMutation({
