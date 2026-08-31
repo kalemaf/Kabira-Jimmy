@@ -58,7 +58,33 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         startDate: loan.disbursedAt,
       });
 
-      return { ...loan, displayStatus, schedule };
+      // The phone a Mobile Money disbursement was actually sent to is never
+      // stored on Loan/LoanApplication itself — it's only ever passed through
+      // to the gateway — but it IS captured durably in the audit log entry
+      // written when the payout was initiated (see disburse/route.ts). Match
+      // on the winning transaction reference rather than just taking the
+      // latest entry, since a loan can carry several failed attempts (with
+      // possibly different phone numbers) before the one that succeeded.
+      let disbursementPhone: string | null = null;
+      if (loan.disbursementMethod === "MobileMoney") {
+        const attempts = await db.auditLog.findMany({
+          where: {
+            entityType: "LoanApplication",
+            entityId: loan.loanApplicationId,
+            action: "loan_application.disbursement_initiated",
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        });
+        const targetRef = loan.loanApplication.disbursementTransactionRef;
+        const match =
+          attempts.find((a) => (a.newValue as { reference?: string } | null)?.reference === targetRef) ??
+          attempts[0] ??
+          null;
+        disbursementPhone = (match?.newValue as { phone?: string } | null)?.phone ?? null;
+      }
+
+      return { ...loan, displayStatus, schedule, disbursementPhone };
     },
     20
   );

@@ -33,6 +33,7 @@ type LoanDetailData = {
   repaymentPeriodMonths: number
   disbursedAt: string
   disbursementMethod: string
+  disbursementPhone: string | null
   status: string
   member: { id: string; firstName: string; lastName: string; memberNumber: string; photoUrl: string | null }
   branch: { name: string }
@@ -386,19 +387,23 @@ export function LoanDetail({ loanId }: { loanId: string }) {
               />
               <OverviewRow label="Loan Officer" value={preparerName} />
               <OverviewRow label="Grace period" value={`${loan.loanApplication.loanProduct.gracePeriodDays} days`} />
-              <OverviewRow label="Disbursement method" value={loan.disbursementMethod} />
             </div>
             <div className="rounded-lg border border-(--border-subtle) bg-(--bg-card) p-5">
-              <h4 className="mb-2 text-sm font-semibold text-(--text-primary)">Timeline</h4>
-              <OverviewRow label="Submitted on" value={new Date(loan.loanApplication.createdAt).toLocaleDateString("en-UG")} />
-              <OverviewRow label="Submitted by" value={preparerName} />
+              <h4 className="mb-2 text-sm font-semibold text-(--text-primary)">Timeline (for audit)</h4>
+              <OverviewRow label="Applied on" value={new Date(loan.loanApplication.createdAt).toLocaleString("en-UG")} />
+              <OverviewRow label="Applied by" value={preparerName} />
               <OverviewRow
                 label="Approved on"
-                value={managerApproval ? new Date(managerApproval.createdAt).toLocaleDateString("en-UG") : undefined}
+                value={managerApproval ? new Date(managerApproval.createdAt).toLocaleString("en-UG") : undefined}
               />
               <OverviewRow label="Approved by" value={managerApproval?.user.name} />
-              <OverviewRow label="Disbursed on" value={new Date(loan.disbursedAt).toLocaleDateString("en-UG")} />
+              <OverviewRow label="Disbursed on" value={new Date(loan.disbursedAt).toLocaleString("en-UG")} />
               <OverviewRow label="Disbursed by" value={loan.disbursedBy.name} />
+              <OverviewRow label="Disbursement method" value={loan.disbursementMethod} />
+              <OverviewRow
+                label="Disbursed to (phone)"
+                value={loan.disbursementMethod === "MobileMoney" ? loan.disbursementPhone : "N/A — " + loan.disbursementMethod}
+              />
             </div>
           </div>
         </TabsContent>
