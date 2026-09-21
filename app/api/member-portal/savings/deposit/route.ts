@@ -6,6 +6,7 @@ import { collectPayment, isDGatewayConfigured } from "@/lib/dgateway";
 import { confirmSavingsDeposit } from "@/lib/payment-confirmation";
 import { writeAuditLog } from "@/lib/audit";
 import { invalidateTag, tags } from "@/lib/cache";
+import { sendCriticalAlert } from "@/lib/alert";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 
@@ -114,10 +115,18 @@ export async function POST(req: Request) {
         transaction,
       });
     } catch (e) {
-      return NextResponse.json(
-        { error: e instanceof Error ? e.message : "Mobile Money collection failed" },
-        { status: 502 }
-      );
+      const message = e instanceof Error ? e.message : "Mobile Money collection failed";
+      // This route previously failed silently server-side — a member's
+      // "deposit failed" toast had no trace anywhere except reading the
+      // response body in their own browser DevTools. Matches the pattern
+      // already used for disbursement failures.
+      await sendCriticalAlert("Mobile Money savings deposit failed", {
+        savingsAccountId,
+        memberNumber: account.member.memberNumber,
+        amount,
+        error: message,
+      });
+      return NextResponse.json({ error: message }, { status: 502 });
     }
   }
 
