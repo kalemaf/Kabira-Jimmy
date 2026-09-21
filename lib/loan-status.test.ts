@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { computeLoanDisplayStatus } from "./loan-status";
+import { computeLoanDisplayStatus, computeDaysPastDue } from "./loan-status";
+import { generateAmortizationSchedule } from "./loan-calculator";
 
 const baseLoan = {
   status: "Active" as const,
@@ -80,5 +81,32 @@ describe("computeLoanDisplayStatus", () => {
     expect(result.tone).toBe("warning");
     expect(result.daysUntilDue).toBeLessThanOrEqual(7);
     expect(result.daysUntilDue).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("computeDaysPastDue", () => {
+  const schedule = generateAmortizationSchedule({
+    principal: 600_000,
+    monthlyRatePercent: 2,
+    periodMonths: 6,
+    method: "ReducingBalance",
+    startDate: new Date("2020-01-01"),
+  });
+
+  it("is zero when nothing is overdue", () => {
+    expect(computeDaysPastDue(schedule, 0, new Date("2020-01-15"))).toBe(0);
+  });
+
+  it("is zero once the loan is fully repaid, no matter how late", () => {
+    const totalPrincipal = schedule.rows.reduce((s, r) => s + r.principal, 0);
+    expect(computeDaysPastDue(schedule, totalPrincipal, new Date("2030-01-01"))).toBe(0);
+  });
+
+  // Regression: this must work for a Defaulted loan too, unlike
+  // computeLoanDisplayStatus() which deliberately returns null for one —
+  // PAR aging needs the real day count regardless of the coarse status.
+  it("reports a positive day count once the first installment is overdue", () => {
+    const days = computeDaysPastDue(schedule, 0, new Date("2020-03-01"));
+    expect(days).toBeGreaterThan(0);
   });
 });

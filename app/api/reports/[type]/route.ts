@@ -2,6 +2,9 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth-guard";
 import { ACCOUNTS } from "@/lib/account-codes";
 import { formatUGX } from "@/lib/utils";
+import { generateAmortizationSchedule } from "@/lib/loan-calculator";
+import { computeDaysPastDue } from "@/lib/loan-status";
+import { PAR_BUCKETS, bucketForDaysPastDue } from "@/lib/par-provisioning";
 import type { ReportResponse, ReportType } from "@/lib/reports";
 import { NextResponse } from "next/server";
 
@@ -118,6 +121,73 @@ async function buildReport(type: ReportType, from: Date, to: Date, memberId: str
           officer: l.recoveryCase?.recoveryOfficer?.name ?? "Unassigned",
         })),
         summary: { "Total at risk": formatUGX(loans.reduce((s, l) => s + l.principal, 0)), Count: loans.length },
+      };
+    }
+
+    case "par-aging": {
+      // A snapshot as of now, not a from/to period report like the others —
+      // "how much of the current portfolio is at risk" only makes sense at
+      // a point in time.
+      const loans = await db.loan.findMany({
+        where: { status: { in: ["Active", "Overdue", "Defaulted"] } },
+        include: { repayments: { where: { status: "Confirmed" } }, adjustments: true },
+      });
+
+      const buckets = new Map<string, { label: string; count: number; outstanding: number; provisioningRate: number }>();
+      for (const b of PAR_BUCKETS) buckets.set(b.key, { label: b.label, count: 0, outstanding: 0, provisioningRate: b.provisioningRate });
+
+      for (const loan of loans) {
+        const repaidPrincipal = loan.repayments.reduce((s, r) => s + r.principalPortion, 0);
+        const writeOffTotal = loan.adjustments
+          .filter((a) => a.type === "WriteOff")
+          .reduce((s, a) => s + (a.amount ?? 0), 0);
+        const outstandingPrincipal = Math.max(loan.principal - repaidPrincipal - writeOffTotal, 0);
+        if (outstandingPrincipal === 0) continue;
+
+        const schedule = generateAmortizationSchedule({
+          principal: loan.principal,
+          monthlyRatePercent: loan.interestRate,
+          periodMonths: loan.repaymentPeriodMonths,
+          method: loan.interestMethod,
+          startDate: loan.disbursedAt,
+        });
+        const daysPastDue = computeDaysPastDue(schedule, repaidPrincipal);
+        const bucket = buckets.get(bucketForDaysPastDue(daysPastDue).key)!;
+        bucket.count += 1;
+        bucket.outstanding += outstandingPrincipal;
+      }
+
+      const totalOutstanding = [...buckets.values()].reduce((s, b) => s + b.outstanding, 0);
+      const totalProvisioning = [...buckets.values()].reduce((s, b) => s + b.outstanding * b.provisioningRate, 0);
+      const totalWrittenOff = await db.loanAdjustment.aggregate({ where: { type: "WriteOff" }, _sum: { amount: true } });
+
+      return {
+        title: "PAR Aging & Provisioning",
+        columns: [
+          { key: "bucket", label: "Bucket" },
+          { key: "count", label: "Loans", align: "right" },
+          { key: "outstanding", label: "Outstanding principal", align: "right" },
+          { key: "share", label: "% of portfolio", align: "right" },
+          { key: "provisioningRate", label: "Provisioning rate", align: "right" },
+          { key: "provisioning", label: "Provisioning required", align: "right" },
+        ],
+        rows: [...buckets.values()].map((b) => ({
+          bucket: b.label,
+          count: b.count,
+          outstanding: formatUGX(b.outstanding),
+          share: totalOutstanding > 0 ? `${((b.outstanding / totalOutstanding) * 100).toFixed(1)}%` : "0%",
+          provisioningRate: `${(b.provisioningRate * 100).toFixed(0)}%`,
+          provisioning: formatUGX(Math.round(b.outstanding * b.provisioningRate)),
+        })),
+        summary: {
+          "Total outstanding portfolio": formatUGX(totalOutstanding),
+          "PAR (non-current) %":
+            totalOutstanding > 0
+              ? `${(((totalOutstanding - (buckets.get("current")?.outstanding ?? 0)) / totalOutstanding) * 100).toFixed(1)}%`
+              : "0%",
+          "Total provisioning required": formatUGX(Math.round(totalProvisioning)),
+          "Cumulative written off (all time)": formatUGX(totalWrittenOff._sum.amount ?? 0),
+        },
       };
     }
 
