@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import {
@@ -102,7 +103,15 @@ type LoanDetailData = {
   }[]
 }
 
-type LoanNote = { id: string; body: string; createdAt: string; author: { name: string; role: string } }
+type LoanNote = {
+  id: string
+  body: string
+  createdAt: string
+  author: { name: string; role: string }
+  isDispute: boolean
+  disputeStatus: "Open" | "Investigating" | "Resolved" | null
+  resolvedBy: { name: string } | null
+}
 
 function BalanceRow({
   label,
@@ -153,6 +162,7 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
   const [downloading, setDownloading] = React.useState(false)
   const [downloadingReceiptId, setDownloadingReceiptId] = React.useState<string | null>(null)
   const [noteBody, setNoteBody] = React.useState("")
+  const [noteIsDispute, setNoteIsDispute] = React.useState(false)
   const [showAdjustDialog, setShowAdjustDialog] = React.useState(false)
   const [adjustType, setAdjustType] = React.useState<"WriteOff" | "Reschedule" | "InterestWaiver">("WriteOff")
   const [adjustAmount, setAdjustAmount] = React.useState<number>(0)
@@ -204,17 +214,35 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
       const res = await fetch(`/api/loans/${loanId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: noteBody }),
+        body: JSON.stringify({ body: noteBody, isDispute: noteIsDispute }),
       })
       if (!res.ok) throw new Error("Failed to add note")
       return res.json()
     },
     onSuccess: () => {
       setNoteBody("")
+      setNoteIsDispute(false)
       queryClient.invalidateQueries({ queryKey: ["loan-notes", loanId] })
-      toast.success("Note added")
+      toast.success(noteIsDispute ? "Dispute flagged" : "Note added")
     },
     onError: () => toast.error("Failed to add note"),
+  })
+
+  const resolveDisputeMutation = useMutation({
+    mutationFn: async ({ noteId, disputeStatus }: { noteId: string; disputeStatus: "Investigating" | "Resolved" }) => {
+      const res = await fetch(`/api/loans/${loanId}/notes/${noteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeStatus }),
+      })
+      if (!res.ok) throw new Error("Failed to update dispute")
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["loan-notes", loanId] })
+      toast.success("Dispute updated")
+    },
+    onError: () => toast.error("Failed to update dispute"),
   })
 
   const adjustMutation = useMutation({
@@ -400,6 +428,8 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
     (loan.loanApplication.submittedByMemberUser ? `${loan.loanApplication.submittedByMemberUser.name} (member self-service)` : "—")
   const managerApproval = loan.loanApplication.approvalSteps.find((s) => s.stage === "Manager" && s.action === "Approve")
 
+  const openDisputes = (notesData?.data ?? []).filter((n) => n.isDispute && n.disputeStatus !== "Resolved")
+
   return (
     <div className="max-w-5xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-(--border-subtle) bg-(--bg-card) p-6">
@@ -414,6 +444,15 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
         </div>
         <StatusBadge status={loan.displayStatus.label} tone={loan.displayStatus.tone} />
       </div>
+
+      {openDisputes.length > 0 ? (
+        <div className="rounded-lg border border-(--error-border) bg-(--error-soft) p-4 text-sm text-(--error-600)">
+          <p className="font-semibold">
+            {openDisputes.length} open dispute{openDisputes.length > 1 ? "s" : ""} on this loan
+          </p>
+          <p className="mt-1">&ldquo;{openDisputes[0].body}&rdquo; — see the Notes tab for details.</p>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
         <Button variant="outline" onClick={() => window.print()} className="gap-1.5">
@@ -614,16 +653,21 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
               value={noteBody}
               onChange={(e) => setNoteBody(e.target.value)}
             />
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm text-(--text-secondary)">
+                <Checkbox checked={noteIsDispute} onCheckedChange={(v) => setNoteIsDispute(!!v)} />
+                Flag as a dispute (e.g. member says they didn&apos;t receive funds)
+              </label>
               <Button
                 size="sm"
+                variant={noteIsDispute ? "destructive" : "default"}
                 disabled={!noteBody.trim()}
                 loading={addNoteMutation.isPending}
                 onClick={() => addNoteMutation.mutate()}
                 className="gap-1.5"
               >
                 <Plus className="size-4" />
-                Add note
+                {noteIsDispute ? "Flag dispute" : "Add note"}
               </Button>
             </div>
           </div>
@@ -634,10 +678,40 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
               <div className="divide-y divide-(--border-subtle)">
                 {notesData.data.map((n) => (
                   <div key={n.id} className="p-4 text-sm">
-                    <p className="text-(--text-primary)">{n.body}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-(--text-primary)">{n.body}</p>
+                      {n.isDispute ? (
+                        <StatusBadge
+                          status={n.disputeStatus ?? "Open"}
+                          tone={n.disputeStatus === "Resolved" ? "success" : n.disputeStatus === "Investigating" ? "warning" : "error"}
+                        />
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-xs text-(--text-secondary)">
                       {n.author.name} ({n.author.role}) · {new Date(n.createdAt).toLocaleString("en-UG")}
+                      {n.resolvedBy ? ` · resolved by ${n.resolvedBy.name}` : ""}
                     </p>
+                    {n.isDispute && n.disputeStatus !== "Resolved" ? (
+                      <div className="mt-2 flex gap-2">
+                        {n.disputeStatus === "Open" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            loading={resolveDisputeMutation.isPending}
+                            onClick={() => resolveDisputeMutation.mutate({ noteId: n.id, disputeStatus: "Investigating" })}
+                          >
+                            Mark investigating
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          loading={resolveDisputeMutation.isPending}
+                          onClick={() => resolveDisputeMutation.mutate({ noteId: n.id, disputeStatus: "Resolved" })}
+                        >
+                          Mark resolved
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
