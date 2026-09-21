@@ -119,19 +119,23 @@ export function LoanProductForm({ productId }: { productId?: string }) {
 
   const mutation = useMutation({
     mutationFn: async (values: LoanProductInput) => {
-      const res = await fetch(isEdit ? `/api/loan-products/${productId}` : "/api/loan-products", {
-        method: isEdit ? "PATCH" : "POST",
+      const res = await fetch("/api/loan-product-change-requests", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ targetProductId: productId, changes: values }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error?.formErrors?.[0] ?? body.error ?? "Failed to save loan product")
+        throw new Error(body.error?.formErrors?.[0] ?? body.error ?? "Failed to submit change request")
       }
       return res.json()
     },
     onSuccess: () => {
-      toast.success(isEdit ? "Loan product updated" : "Loan product created")
+      toast.success(
+        isEdit
+          ? "Change submitted — a different SuperAdmin or Manager must approve it before it takes effect"
+          : "New product submitted — a different SuperAdmin or Manager must approve it before it's created"
+      )
       router.push("/dashboard/loan-products")
     },
     onError: (err: Error) => toast.error(err.message),
@@ -294,7 +298,7 @@ export function LoanProductForm({ productId }: { productId?: string }) {
             Cancel
           </Button>
           <Button type="submit" loading={mutation.isPending}>
-            {isEdit ? "Save changes" : "Create product"}
+            {isEdit ? "Submit change for approval" : "Submit for approval"}
           </Button>
         </div>
       </form>

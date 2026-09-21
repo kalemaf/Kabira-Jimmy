@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
-import { requireSession, requireRole } from "@/lib/auth-guard";
-import { getCachedOrFetch, invalidateTag, tags } from "@/lib/cache";
-import { loanProductSchema } from "@/lib/schemas/loan-product";
+import { requireSession } from "@/lib/auth-guard";
+import { getCachedOrFetch, tags } from "@/lib/cache";
 import { NextResponse } from "next/server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -17,16 +16,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json(product);
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await requireRole(["SuperAdmin", "Manager"]);
-  if (error) return error;
-
-  const { id } = await params;
-  const body = await req.json();
-  const parsed = loanProductSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const product = await db.loanProduct.update({ where: { id }, data: parsed.data });
-  await invalidateTag(tags.loanProducts);
-  return NextResponse.json(product);
-}
+// Editing a loan product directly here was retired in favor of maker-
+// checker: POST /api/loan-product-change-requests (with this id as
+// targetProductId) proposes the edit, and a different SuperAdmin/Manager
+// must approve it via .../[id]/approve before it actually applies — closing
+// the previous gap where interest rates/fees on a live product could change
+// with zero audit trail and no review.
