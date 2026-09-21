@@ -9,4 +9,8 @@ export const ACCOUNTS = {
   INTEREST_INCOME: "4000",
   PENALTY_INCOME: "4010",
   FEE_INCOME: "4020",
+  // Already seeded (prisma/seed.ts) as "Loan Loss Provision" — just never
+  // had a named constant until a caller (loan write-offs) actually needed
+  // to post against it.
+  LOAN_LOSS_PROVISION: "5030",
 } as const;

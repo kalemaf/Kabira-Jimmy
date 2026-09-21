@@ -171,4 +171,23 @@ describe("computeOutstandingBreakdown", () => {
     expect(outstanding.penaltyDue).toBeGreaterThan(0);
     expect(outstanding.totalDue).toBe(outstanding.principalDue + outstanding.interestDue + outstanding.penaltyDue);
   });
+
+  it("reduces interestDue and interestPayable by a waived amount, floored at zero", () => {
+    const schedule = generateAmortizationSchedule({
+      principal: 600_000,
+      monthlyRatePercent: 2,
+      periodMonths: 6,
+      method: "ReducingBalance",
+      startDate: new Date("2020-01-01"),
+    });
+    const withoutWaiver = computeOutstandingBreakdown(schedule, [], 5, new Date("2020-08-01"));
+    const withWaiver = computeOutstandingBreakdown(schedule, [], 5, new Date("2020-08-01"), 1_000);
+    expect(withWaiver.interestDue).toBe(withoutWaiver.interestDue - 1_000);
+    expect(withWaiver.interestPayable).toBe(withoutWaiver.interestPayable - 1_000);
+
+    // Waiving more than what's owed floors at zero rather than going negative.
+    const fullyWaived = computeOutstandingBreakdown(schedule, [], 5, new Date("2020-08-01"), schedule.totalInterest);
+    expect(fullyWaived.interestDue).toBe(0);
+    expect(fullyWaived.interestPayable).toBe(0);
+  });
 });

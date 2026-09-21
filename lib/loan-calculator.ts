@@ -277,7 +277,15 @@ export function computeOutstandingBreakdown(
   schedule: AmortizationSchedule,
   confirmedRepayments: { principalPortion: number; interestPortion: number; penaltyPortion: number }[],
   penaltyRatePercent: number,
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
+  /**
+   * Sum of any InterestWaiver LoanAdjustments on this loan (see
+   * prisma/schema.prisma's LoanAdjustment model). This app recognizes
+   * interest on a cash basis — nothing is posted to the ledger for interest
+   * until a repayment lands — so waiving future interest needs no reversing
+   * ledger entry, just a reduction here in what's actually still owed.
+   */
+  waivedInterest = 0
 ): {
   principalDue: number;
   interestDue: number;
@@ -306,14 +314,14 @@ export function computeOutstandingBreakdown(
   }
 
   const principalDue = Math.max(round(scheduledPrincipal - totalRepaidPrincipal), 0);
-  const interestDue = Math.max(round(scheduledInterest - totalRepaidInterest), 0);
+  const interestDue = Math.max(round(scheduledInterest - totalRepaidInterest - waivedInterest), 0);
 
   const repaidTowardOverdue = Math.min(overdueInstallmentTotal, totalRepaidPrincipal + totalRepaidInterest);
   const unpaidOverdue = Math.max(overdueInstallmentTotal - repaidTowardOverdue, 0);
   const penaltyDue = Math.max(round(calculatePenalty(unpaidOverdue, penaltyRatePercent) - totalRepaidPenalty), 0);
 
   const principalPayable = Math.max(round(schedule.totalPrincipal - totalRepaidPrincipal), 0);
-  const interestPayable = Math.max(round(schedule.totalInterest - totalRepaidInterest), 0);
+  const interestPayable = Math.max(round(schedule.totalInterest - totalRepaidInterest - waivedInterest), 0);
 
   return {
     principalDue,
