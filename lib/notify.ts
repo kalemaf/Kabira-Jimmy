@@ -9,14 +9,21 @@ import { PenaltyAlertEmail } from "@/components/emails/penalty-alert-email";
 import { MembershipExpiryEmail } from "@/components/emails/membership-expiry-email";
 import type { ReactElement } from "react";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 async function sendEmail(to: string, subject: string, react: ReactElement) {
   if (!process.env.RESEND_API_KEY) {
     console.warn(`[notify] RESEND_API_KEY not set — would have emailed ${to}: ${subject}`);
     return;
   }
   try {
+    // Constructed lazily, only once the key is known to be present — the
+    // Resend SDK throws in its own constructor on a missing/empty key, so a
+    // module-scope `new Resend(...)` (as this used to be) crashes Next's
+    // build entirely for every route that transitively imports this file,
+    // not just this function, the moment RESEND_API_KEY is unset anywhere
+    // (a staging/preview deploy with no email configured, or the key
+    // expiring in production) — turning a soft "email disabled" dependency
+    // into a hard "the whole app won't build" one.
+    const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
       to,
