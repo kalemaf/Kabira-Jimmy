@@ -34,6 +34,17 @@ describe("computeLoanDisplayStatus", () => {
     expect(result.outstandingBalance).toBe(600_000);
   });
 
+  it("reports Written off with a zero balance regardless of what was actually outstanding", () => {
+    const result = computeLoanDisplayStatus(
+      { ...baseLoan, status: "WrittenOff", disbursedAt: new Date("2020-01-01") },
+      100_000
+    );
+    expect(result.label).toBe("Written off");
+    expect(result.tone).toBe("neutral");
+    expect(result.outstandingBalance).toBe(0);
+    expect(result.nextDueDate).toBeNull();
+  });
+
   it("reports Overdue with the correct day count once loan.status is Overdue", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-04-01"));

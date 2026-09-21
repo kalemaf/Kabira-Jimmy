@@ -1,6 +1,6 @@
 import { generateAmortizationSchedule, type InterestMethod } from "@/lib/loan-calculator";
 
-export type LoanDisplayTone = "success" | "info" | "warning" | "accent" | "error" | "defaulted";
+export type LoanDisplayTone = "success" | "info" | "warning" | "accent" | "error" | "defaulted" | "neutral";
 
 export type LoanDisplayStatus = {
   label: string;
@@ -19,7 +19,7 @@ export type LoanDisplayStatus = {
  */
 export function computeLoanDisplayStatus(
   loan: {
-    status: "Active" | "PaidOff" | "Overdue" | "Defaulted";
+    status: "Active" | "PaidOff" | "Overdue" | "Defaulted" | "WrittenOff";
     principal: number;
     interestRate: number;
     interestMethod: InterestMethod;
@@ -28,6 +28,13 @@ export function computeLoanDisplayStatus(
   },
   totalPrincipalRepaid: number
 ): LoanDisplayStatus {
+  // Written off closes the loan as an uncollectible loss — no further
+  // schedule/due-date math applies, same as Paid, just a different reason
+  // the balance is settled.
+  if (loan.status === "WrittenOff") {
+    return { label: "Written off", tone: "neutral", nextDueDate: null, daysUntilDue: null, outstandingBalance: 0 };
+  }
+
   const schedule = generateAmortizationSchedule({
     principal: loan.principal,
     monthlyRatePercent: loan.interestRate,
