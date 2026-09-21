@@ -48,6 +48,22 @@ export function canActAtStage(role: StaffRole, stage: ApprovalStage): boolean {
   return role === "SuperAdmin" || STAGE_ROLES[stage].includes(role);
 }
 
+/**
+ * Every stage except Disbursement itself is an approve/reject/return
+ * decision point — Disbursement instead shows the "pick a method and
+ * disburse" panel (see components/dashboard/loan-applications/
+ * application-detail.tsx). Pulled out as its own function (rather than an
+ * inline array literal in the component) after that array once shipped
+ * without "LoanOfficer" in it, silently hiding the approve button for every
+ * member self-service application — this makes the set derive from
+ * ApprovalStage itself, so adding a new non-Disbursement stage can't repeat
+ * that mistake, and it's unit-testable without any component-rendering
+ * infrastructure.
+ */
+export function isApprovalStage(stage: ApprovalStage | undefined): boolean {
+  return !!stage && stage !== "Disbursement";
+}
+
 export const STAGE_LABELS: Record<ApprovalStage, string> = {
   LoanOfficer: "Loan Officer review",
   Secretary: "Secretary review",

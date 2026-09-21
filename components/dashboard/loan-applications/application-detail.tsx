@@ -27,7 +27,7 @@ import {
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { formatUGX } from "@/lib/utils"
-import { STATUS_STAGE, STATUS_LABELS, STAGE_LABELS, canActAtStage, type ApplicationStatus } from "@/lib/loan-workflow"
+import { STATUS_STAGE, STATUS_LABELS, STAGE_LABELS, canActAtStage, isApprovalStage, type ApplicationStatus } from "@/lib/loan-workflow"
 import type { StaffRole } from "@/components/dashboard/nav-config"
 
 type ApplicationDetail = {
@@ -202,8 +202,6 @@ export function ApplicationDetail({
   const stage = STATUS_STAGE[application.status]
   const isPreparer = application.preparedByUserId === currentUserId
   const canAct = !!stage && canActAtStage(role, stage) && !isPreparer
-  const isApprovalStage =
-    stage === "LoanOfficer" || stage === "Secretary" || stage === "Treasurer" || stage === "Manager"
   const isDisbursementStage = stage === "Disbursement"
   const canReverse =
     (role === "SuperAdmin" || role === "Manager") && application.status === "Disbursed" && !!application.loan
@@ -338,7 +336,7 @@ export function ApplicationDetail({
         </p>
       ) : null}
 
-      {canAct && isApprovalStage ? (
+      {canAct && isApprovalStage(stage) ? (
         <div className="flex justify-end gap-3">
           <Button variant="destructive" onClick={() => setConfirmAction("Reject")}>
             <X className="size-4" />

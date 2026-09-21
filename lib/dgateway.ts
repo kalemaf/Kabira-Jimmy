@@ -38,8 +38,27 @@ function getConfig() {
   return { apiUrl: apiUrl.replace(/\/$/, ""), apiKey };
 }
 
+/**
+ * Staging-only fake gateway. Every real bug found in this file this year
+ * (a bad API key, a "vendor" rejection on a valid phone number, a payout
+ * that failed against RohoPay's live rail) was discovered by watching a
+ * real member's real money fail on production, because there was nowhere
+ * safe to exercise the disburse/collect/webhook lifecycle first. When
+ * DGATEWAY_MODE=mock, every function below returns a deterministic fake
+ * result instead of calling RohoPay — same shape every caller already
+ * handles, so no caller needs to know mock mode exists. Deliberately mimics
+ * production's real behavior (see collect/disburse below) rather than
+ * always synchronously succeeding: a mock that's too easy hides the exact
+ * class of bug this mode exists to catch. Resolve a mock transaction via
+ * app/api/dgateway/webhook/simulate, which drives the same confirmation
+ * path a real RohoPay webhook would.
+ */
+export function isMockMode(): boolean {
+  return process.env.DGATEWAY_MODE === "mock";
+}
+
 export function isDGatewayConfigured(): boolean {
-  return getConfig() !== null;
+  return isMockMode() || getConfig() !== null;
 }
 
 // CRITICAL, confirmed via RohoPay's own dashboard (Developers → Webhooks):
@@ -100,6 +119,10 @@ export async function collectPayment(params: {
   reference: string;
   narration?: string;
 }): Promise<DGatewayResult> {
+  if (isMockMode()) {
+    return { transactionRef: `MOCK-${randomUUID()}`, status: "pending" };
+  }
+
   const config = getConfig();
   if (!config) {
     throw new Error("RohoPay is not configured (set ROHO_API_URL and ROHO_API_KEY)");
@@ -148,6 +171,10 @@ export async function disburse(params: {
   reference: string;
   narration?: string;
 }): Promise<DGatewayResult> {
+  if (isMockMode()) {
+    return { transactionRef: `MOCK-${randomUUID()}`, status: "pending" };
+  }
+
   const config = getConfig();
   if (!config) {
     throw new Error("RohoPay is not configured (set ROHO_API_URL and ROHO_API_KEY)");
@@ -184,6 +211,10 @@ function normalizeStatus(raw: string | undefined): DGatewayTransactionStatus {
  * had confirmed but our webhook never received.
  */
 export async function getTransactionStatus(reference: string): Promise<DGatewayResult> {
+  if (isMockMode()) {
+    return { transactionRef: reference, status: "pending", message: "Mock mode — resolve via /api/dgateway/webhook/simulate" };
+  }
+
   const config = getConfig();
   if (!config) {
     throw new Error("RohoPay is not configured (set ROHO_API_URL and ROHO_API_KEY)");
@@ -215,6 +246,8 @@ export type WalletBalance = { balance: number; currency: string };
  * the float manually before Mobile Money payouts start failing.
  */
 export async function getWalletBalance(): Promise<WalletBalance | null> {
+  if (isMockMode()) return { balance: 5_000_000, currency: "UGX" };
+
   const config = getConfig();
   if (!config) return null;
 
