@@ -2,6 +2,7 @@ import { memberAuth } from "@/lib/member-auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MemberHeader } from "@/components/member-portal/member-header";
+import { WhatsAppGroupButton } from "@/components/member-portal/whatsapp-group-button";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function MemberDashboardLayout({
     <div className="flex min-h-screen flex-col bg-(--bg-canvas)">
       <MemberHeader name={session.user.name} />
       {children}
+      <WhatsAppGroupButton />
     </div>
   );
 }
