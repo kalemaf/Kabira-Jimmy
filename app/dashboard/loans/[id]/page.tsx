@@ -26,7 +26,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
         }}
       />
       <main className="flex-1 px-4 py-6 md:px-8">
-        <LoanDetail loanId={id} />
+        <LoanDetail loanId={id} role={role} />
       </main>
     </>
   );

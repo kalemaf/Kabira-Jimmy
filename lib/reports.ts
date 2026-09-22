@@ -12,6 +12,7 @@ export const REPORT_TYPES = [
   { type: "loans", label: "Loan Report", category: "Loans" },
   { type: "collections", label: "Collection Report", category: "Loans" },
   { type: "defaulters", label: "Defaulters Report", category: "Loans" },
+  { type: "par-aging", label: "PAR Aging & Provisioning", category: "Loans" },
   { type: "loan-officer-performance", label: "Loan Officer Performance", category: "Loans" },
   { type: "guarantor", label: "Guarantor Report", category: "Loans" },
   { type: "savings", label: "Savings Report", category: "Savings" },

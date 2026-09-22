@@ -60,7 +60,11 @@ model User {
   savingsTransactions  SavingsTransaction[]
   confirmedSavingsTransactions SavingsTransaction[] @relation("ConfirmedSavingsTransactions")
   approvedSavingsTransactions  SavingsTransaction[] @relation("ApprovedSavingsTransactions")
-  loanNotes            LoanNote[]
+  loanNotes            LoanNote[]            @relation("LoanNoteAuthor")
+  resolvedLoanNotes    LoanNote[]            @relation("LoanNoteResolved")
+  loanAdjustments      LoanAdjustment[]
+  requestedLoanProductChanges LoanProductChangeRequest[] @relation("LoanProductChangeRequested")
+  reviewedLoanProductChanges  LoanProductChangeRequest[] @relation("LoanProductChangeReviewed")
 
   @@index([branchId])
   @@map("user")
@@ -304,8 +308,45 @@ model LoanProduct {
   updatedAt             DateTime       @updatedAt
 
   loanApplications LoanApplication[]
+  changeRequests   LoanProductChangeRequest[]
 
   @@map("loan_product")
+}
+
+enum LoanProductChangeRequestStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+/**
+ * Maker-checker for loan products, mirroring the loan-application workflow
+ * in lib/loan-workflow.ts: a SuperAdmin/Manager proposes a create or update
+ * as a pending JSON diff rather than writing straight to LoanProduct, and a
+ * DIFFERENT SuperAdmin/Manager must approve it before the change actually
+ * applies. Closes a real gap — loan product create/edit previously wrote no
+ * audit trail at all and had no approval gate, unlike every other
+ * money-adjacent workflow in this app. `targetProductId` is null for a
+ * proposed new product; `changes` holds the full proposed LoanProduct field
+ * set (matches lib/schemas/loan-product.ts's shape) either way.
+ */
+model LoanProductChangeRequest {
+  id                String                          @id @default(cuid())
+  targetProductId   String?
+  targetProduct     LoanProduct?                     @relation(fields: [targetProductId], references: [id])
+  changes           Json
+  requestedByUserId String
+  requestedBy       User                             @relation("LoanProductChangeRequested", fields: [requestedByUserId], references: [id])
+  status            LoanProductChangeRequestStatus   @default(Pending)
+  reviewedByUserId  String?
+  reviewedBy        User?                            @relation("LoanProductChangeReviewed", fields: [reviewedByUserId], references: [id])
+  reviewedAt        DateTime?
+  comments          String?
+  createdAt         DateTime                         @default(now())
+
+  @@index([targetProductId])
+  @@index([status])
+  @@map("loan_product_change_request")
 }
 
 enum GuarantorStatus {
@@ -500,6 +541,7 @@ enum LoanStatus {
   PaidOff
   Overdue
   Defaulted
+  WrittenOff
 }
 
 enum DisbursementMethod {
@@ -533,6 +575,7 @@ model Loan {
   collateral    Collateral[]
   recoveryCase  RecoveryCase?
   notes         LoanNote[]
+  adjustments   LoanAdjustment[]
 
   @@index([memberId])
   @@index([branchId])
@@ -540,16 +583,67 @@ model Loan {
   @@map("loan")
 }
 
+enum LoanAdjustmentType {
+  WriteOff
+  Reschedule
+  InterestWaiver
+}
+
+/**
+ * An audited restructuring event on an already-disbursed loan — write-off,
+ * rescheduling, or an interest waiver — kept as its own append-only record
+ * rather than silently mutating Loan fields, so "why is this loan's balance/
+ * term different from what it was disbursed as" always has an answer.
+ * amount is the written-off/waived amount; the repaymentPeriodMonths pair is
+ * only set for a Reschedule (the amortization schedule itself is never
+ * stored — app/api/loans/[id]/route.ts regenerates it fresh from
+ * Loan.repaymentPeriodMonths on every read, so updating that one field is
+ * sufficient to reschedule).
+ */
+model LoanAdjustment {
+  id                            String             @id @default(cuid())
+  loanId                        String
+  loan                          Loan               @relation(fields: [loanId], references: [id])
+  type                          LoanAdjustmentType
+  amount                        Int?
+  previousRepaymentPeriodMonths Int?
+  newRepaymentPeriodMonths      Int?
+  reason                        String
+  requestedByUserId             String
+  requestedBy                   User               @relation(fields: [requestedByUserId], references: [id])
+  createdAt                     DateTime           @default(now())
+
+  @@index([loanId])
+  @@map("loan_adjustment")
+}
+
+enum DisputeStatus {
+  Open
+  Investigating
+  Resolved
+}
+
 model LoanNote {
   id        String   @id @default(cuid())
   loanId    String
   loan      Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
   authorId  String
-  author    User     @relation(fields: [authorId], references: [id])
+  author    User     @relation("LoanNoteAuthor", fields: [authorId], references: [id])
   body      String
   createdAt DateTime @default(now())
 
+  // A note flagged as a dispute (e.g. "member says he didn't receive the
+  // disbursement") previously had no way to be distinguished from routine
+  // commentary, tracked to resolution, or surfaced at a glance on the loan
+  // — it lived only in whichever staff member happened to notice it.
+  isDispute        Boolean        @default(false)
+  disputeStatus    DisputeStatus?
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  resolvedBy       User?          @relation("LoanNoteResolved", fields: [resolvedByUserId], references: [id])
+
   @@index([loanId])
+  @@index([isDispute])
   @@map("loan_note")
 }
 

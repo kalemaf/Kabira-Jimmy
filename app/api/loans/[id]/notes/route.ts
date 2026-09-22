@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       db.loanNote.findMany({
         where: { loanId: id },
         orderBy: { createdAt: "desc" },
-        include: { author: { select: { name: true, role: true } } },
+        include: { author: { select: { name: true, role: true } }, resolvedBy: { select: { name: true } } },
       }),
     30
   );
@@ -39,16 +39,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 });
 
   const note = await db.loanNote.create({
-    data: { loanId: id, authorId: session.user.id, body: parsed.data.body },
-    include: { author: { select: { name: true, role: true } } },
+    data: {
+      loanId: id,
+      authorId: session.user.id,
+      body: parsed.data.body,
+      isDispute: parsed.data.isDispute ?? false,
+      disputeStatus: parsed.data.isDispute ? "Open" : null,
+    },
+    include: { author: { select: { name: true, role: true } }, resolvedBy: { select: { name: true } } },
   });
 
   await writeAuditLog({
     userId: session.user.id,
-    action: "loan_note.create",
+    action: parsed.data.isDispute ? "loan_note.dispute_flagged" : "loan_note.create",
     entityType: "Loan",
     entityId: id,
-    newValue: { body: parsed.data.body },
+    newValue: { body: parsed.data.body, isDispute: parsed.data.isDispute ?? false },
     request: req,
   });
 

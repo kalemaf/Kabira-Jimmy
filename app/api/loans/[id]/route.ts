@@ -41,6 +41,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           },
           collateral: true,
           recoveryCase: true,
+          adjustments: {
+            orderBy: { createdAt: "desc" },
+            include: { requestedBy: { select: { name: true } } },
+          },
         },
       });
 

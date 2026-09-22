@@ -14,9 +14,28 @@ import {
   Receipt,
   StickyNote,
   Plus,
+  Scale,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { CurrencyInput } from "@/components/ui/currency-input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/dashboard/empty-state"
@@ -24,6 +43,7 @@ import { formatUGX } from "@/lib/utils"
 import { computeOutstandingBreakdown, calculateUpfrontFees } from "@/lib/loan-calculator"
 import type { AmortizationRow, InterestMethod } from "@/lib/loan-calculator"
 import type { LoanDisplayStatus } from "@/lib/loan-status"
+import type { StaffRole } from "@/components/dashboard/nav-config"
 
 type LoanDetailData = {
   id: string
@@ -71,14 +91,34 @@ type LoanDetailData = {
   collateral: { id: string; description: string; estimatedValue: number }[]
   displayStatus: LoanDisplayStatus
   schedule: { rows: AmortizationRow[]; totalPrincipal: number; totalInterest: number; totalPayable: number; monthlyInstallment: number | null }
+  adjustments: {
+    id: string
+    type: "WriteOff" | "Reschedule" | "InterestWaiver"
+    amount: number | null
+    previousRepaymentPeriodMonths: number | null
+    newRepaymentPeriodMonths: number | null
+    reason: string
+    requestedBy: { name: string }
+    createdAt: string
+  }[]
 }
 
-type LoanNote = { id: string; body: string; createdAt: string; author: { name: string; role: string } }
+type LoanNote = {
+  id: string
+  body: string
+  createdAt: string
+  author: { name: string; role: string }
+  isDispute: boolean
+  disputeStatus: "Open" | "Investigating" | "Resolved" | null
+  resolvedBy: { name: string } | null
+}
 
 function BalanceRow({
   label,
   original,
   paid,
+  waived = 0,
+  writtenOff = 0,
   outstanding,
   overdue,
   bold,
@@ -86,6 +126,8 @@ function BalanceRow({
   label: string
   original: number
   paid: number
+  waived?: number
+  writtenOff?: number
   outstanding: number
   overdue: number
   bold?: boolean
@@ -97,8 +139,8 @@ function BalanceRow({
       <td className={`${colBorder} pl-5 ${cell}`}>{label}</td>
       <td className={`${colBorder} text-right font-mono tabular-nums ${cell}`}>{formatUGX(original)}</td>
       <td className={`${colBorder} text-right font-mono tabular-nums ${cell}`}>{formatUGX(paid)}</td>
-      <td className={`${colBorder} text-right font-mono tabular-nums text-(--text-muted)`}>{formatUGX(0)}</td>
-      <td className={`${colBorder} text-right font-mono tabular-nums text-(--text-muted)`}>{formatUGX(0)}</td>
+      <td className={`${colBorder} text-right font-mono tabular-nums ${waived > 0 ? "text-(--text-primary)" : "text-(--text-muted)"}`}>{formatUGX(waived)}</td>
+      <td className={`${colBorder} text-right font-mono tabular-nums ${writtenOff > 0 ? "text-(--text-primary)" : "text-(--text-muted)"}`}>{formatUGX(writtenOff)}</td>
       <td className={`${colBorder} text-right font-mono tabular-nums ${cell}`}>{formatUGX(outstanding)}</td>
       <td className={`pr-5 text-right font-mono tabular-nums ${overdue > 0 ? "text-(--error-600)" : cell}`}>
         {formatUGX(overdue)}
@@ -116,10 +158,16 @@ function OverviewRow({ label, value }: { label: string; value: React.ReactNode }
   )
 }
 
-export function LoanDetail({ loanId }: { loanId: string }) {
+export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }) {
   const [downloading, setDownloading] = React.useState(false)
   const [downloadingReceiptId, setDownloadingReceiptId] = React.useState<string | null>(null)
   const [noteBody, setNoteBody] = React.useState("")
+  const [noteIsDispute, setNoteIsDispute] = React.useState(false)
+  const [showAdjustDialog, setShowAdjustDialog] = React.useState(false)
+  const [adjustType, setAdjustType] = React.useState<"WriteOff" | "Reschedule" | "InterestWaiver">("WriteOff")
+  const [adjustAmount, setAdjustAmount] = React.useState<number>(0)
+  const [adjustNewPeriod, setAdjustNewPeriod] = React.useState<number>(0)
+  const [adjustReason, setAdjustReason] = React.useState("")
   const queryClient = useQueryClient()
 
   const { data: loan, isLoading } = useQuery({
@@ -166,17 +214,69 @@ export function LoanDetail({ loanId }: { loanId: string }) {
       const res = await fetch(`/api/loans/${loanId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: noteBody }),
+        body: JSON.stringify({ body: noteBody, isDispute: noteIsDispute }),
       })
       if (!res.ok) throw new Error("Failed to add note")
       return res.json()
     },
     onSuccess: () => {
       setNoteBody("")
+      setNoteIsDispute(false)
       queryClient.invalidateQueries({ queryKey: ["loan-notes", loanId] })
-      toast.success("Note added")
+      toast.success(noteIsDispute ? "Dispute flagged" : "Note added")
     },
     onError: () => toast.error("Failed to add note"),
+  })
+
+  const resolveDisputeMutation = useMutation({
+    mutationFn: async ({ noteId, disputeStatus }: { noteId: string; disputeStatus: "Investigating" | "Resolved" }) => {
+      const res = await fetch(`/api/loans/${loanId}/notes/${noteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeStatus }),
+      })
+      if (!res.ok) throw new Error("Failed to update dispute")
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["loan-notes", loanId] })
+      toast.success("Dispute updated")
+    },
+    onError: () => toast.error("Failed to update dispute"),
+  })
+
+  const adjustMutation = useMutation({
+    mutationFn: async () => {
+      const body =
+        adjustType === "Reschedule"
+          ? { type: adjustType, newRepaymentPeriodMonths: adjustNewPeriod, reason: adjustReason }
+          : { type: adjustType, amount: adjustAmount, reason: adjustReason }
+      const res = await fetch(`/api/loans/${loanId}/adjustments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error?.formErrors?.[0] ?? errBody.error ?? "Failed to apply adjustment")
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      toast.success(
+        adjustType === "WriteOff"
+          ? "Loan written off"
+          : adjustType === "Reschedule"
+            ? "Repayment period rescheduled"
+            : "Interest waived"
+      )
+      setShowAdjustDialog(false)
+      setAdjustAmount(0)
+      setAdjustNewPeriod(0)
+      setAdjustReason("")
+      queryClient.invalidateQueries({ queryKey: ["loan", loanId] })
+    },
+    onError: (err: Error) => toast.error(err.message),
   })
 
   async function downloadAgreement() {
@@ -271,26 +371,53 @@ export function LoanDetail({ loanId }: { loanId: string }) {
   const repaidInterest = confirmedRepayments.reduce((s, r) => s + r.interestPortion, 0)
   const repaidPenalty = confirmedRepayments.reduce((s, r) => s + r.penaltyPortion, 0)
 
-  const outstanding = computeOutstandingBreakdown(loan.schedule, confirmedRepayments, loan.loanApplication.loanProduct.penaltyRate)
+  const writeOffTotal = loan.adjustments.filter((a) => a.type === "WriteOff").reduce((s, a) => s + (a.amount ?? 0), 0)
+  const waivedInterestTotal = loan.adjustments
+    .filter((a) => a.type === "InterestWaiver")
+    .reduce((s, a) => s + (a.amount ?? 0), 0)
+
+  const outstanding = computeOutstandingBreakdown(
+    loan.schedule,
+    confirmedRepayments,
+    loan.loanApplication.loanProduct.penaltyRate,
+    undefined,
+    waivedInterestTotal
+  )
   const fees = calculateUpfrontFees(loan.principal, {
     processingFee: loan.loanApplication.loanProduct.processingFee,
     insuranceFee: loan.loanApplication.loanProduct.insuranceFee,
     serviceCharge: loan.loanApplication.loanProduct.serviceCharge,
   })
 
-  const principalOutstandingTotal = Math.max(loan.principal - repaidPrincipal, 0)
-  const interestOutstandingTotal = Math.max(loan.schedule.totalInterest - repaidInterest, 0)
+  const principalOutstandingTotal = Math.max(loan.principal - repaidPrincipal - writeOffTotal, 0)
+  const interestOutstandingTotal = Math.max(loan.schedule.totalInterest - repaidInterest - waivedInterestTotal, 0)
   const penaltyOriginal = repaidPenalty + outstanding.penaltyDue
 
   const balanceRows = [
-    { label: "Principal", original: loan.principal, paid: repaidPrincipal, outstanding: principalOutstandingTotal, overdue: outstanding.principalDue },
-    { label: "Interest", original: loan.schedule.totalInterest, paid: repaidInterest, outstanding: interestOutstandingTotal, overdue: outstanding.interestDue },
+    {
+      label: "Principal",
+      original: loan.principal,
+      paid: repaidPrincipal,
+      writtenOff: writeOffTotal,
+      outstanding: principalOutstandingTotal,
+      overdue: outstanding.principalDue,
+    },
+    {
+      label: "Interest",
+      original: loan.schedule.totalInterest,
+      paid: repaidInterest,
+      waived: waivedInterestTotal,
+      outstanding: interestOutstandingTotal,
+      overdue: outstanding.interestDue,
+    },
     { label: "Fees", original: fees.total, paid: fees.total, outstanding: 0, overdue: 0 },
     { label: "Penalties", original: penaltyOriginal, paid: repaidPenalty, outstanding: outstanding.penaltyDue, overdue: outstanding.penaltyDue },
   ]
   const totals = {
     original: balanceRows.reduce((s, r) => s + r.original, 0),
     paid: balanceRows.reduce((s, r) => s + r.paid, 0),
+    waived: balanceRows.reduce((s, r) => s + ("waived" in r ? (r.waived ?? 0) : 0), 0),
+    writtenOff: balanceRows.reduce((s, r) => s + ("writtenOff" in r ? (r.writtenOff ?? 0) : 0), 0),
     outstanding: balanceRows.reduce((s, r) => s + r.outstanding, 0),
     overdue: balanceRows.reduce((s, r) => s + r.overdue, 0),
   }
@@ -300,6 +427,8 @@ export function LoanDetail({ loanId }: { loanId: string }) {
     loan.loanApplication.preparedBy?.name ??
     (loan.loanApplication.submittedByMemberUser ? `${loan.loanApplication.submittedByMemberUser.name} (member self-service)` : "—")
   const managerApproval = loan.loanApplication.approvalSteps.find((s) => s.stage === "Manager" && s.action === "Approve")
+
+  const openDisputes = (notesData?.data ?? []).filter((n) => n.isDispute && n.disputeStatus !== "Resolved")
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -315,6 +444,15 @@ export function LoanDetail({ loanId }: { loanId: string }) {
         </div>
         <StatusBadge status={loan.displayStatus.label} tone={loan.displayStatus.tone} />
       </div>
+
+      {openDisputes.length > 0 ? (
+        <div className="rounded-lg border border-(--error-border) bg-(--error-soft) p-4 text-sm text-(--error-600)">
+          <p className="font-semibold">
+            {openDisputes.length} open dispute{openDisputes.length > 1 ? "s" : ""} on this loan
+          </p>
+          <p className="mt-1">&ldquo;{openDisputes[0].body}&rdquo; — see the Notes tab for details.</p>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
         <Button variant="outline" onClick={() => window.print()} className="gap-1.5">
@@ -333,6 +471,14 @@ export function LoanDetail({ loanId }: { loanId: string }) {
           <Download className="size-4" />
           Download Agreement
         </Button>
+        {(role === "SuperAdmin" || role === "Manager") &&
+        loan.status !== "PaidOff" &&
+        loan.status !== "WrittenOff" ? (
+          <Button variant="outline" onClick={() => setShowAdjustDialog(true)} className="gap-1.5">
+            <Scale className="size-4" />
+            Restructure loan
+          </Button>
+        ) : null}
       </div>
 
       <Tabs defaultValue="details">
@@ -345,6 +491,7 @@ export function LoanDetail({ loanId }: { loanId: string }) {
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="charges">Charges</TabsTrigger>
+          <TabsTrigger value="adjustments">Adjustments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4 space-y-6">
@@ -506,16 +653,21 @@ export function LoanDetail({ loanId }: { loanId: string }) {
               value={noteBody}
               onChange={(e) => setNoteBody(e.target.value)}
             />
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm text-(--text-secondary)">
+                <Checkbox checked={noteIsDispute} onCheckedChange={(v) => setNoteIsDispute(!!v)} />
+                Flag as a dispute (e.g. member says they didn&apos;t receive funds)
+              </label>
               <Button
                 size="sm"
+                variant={noteIsDispute ? "destructive" : "default"}
                 disabled={!noteBody.trim()}
                 loading={addNoteMutation.isPending}
                 onClick={() => addNoteMutation.mutate()}
                 className="gap-1.5"
               >
                 <Plus className="size-4" />
-                Add note
+                {noteIsDispute ? "Flag dispute" : "Add note"}
               </Button>
             </div>
           </div>
@@ -526,10 +678,40 @@ export function LoanDetail({ loanId }: { loanId: string }) {
               <div className="divide-y divide-(--border-subtle)">
                 {notesData.data.map((n) => (
                   <div key={n.id} className="p-4 text-sm">
-                    <p className="text-(--text-primary)">{n.body}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-(--text-primary)">{n.body}</p>
+                      {n.isDispute ? (
+                        <StatusBadge
+                          status={n.disputeStatus ?? "Open"}
+                          tone={n.disputeStatus === "Resolved" ? "success" : n.disputeStatus === "Investigating" ? "warning" : "error"}
+                        />
+                      ) : null}
+                    </div>
                     <p className="mt-1 text-xs text-(--text-secondary)">
                       {n.author.name} ({n.author.role}) · {new Date(n.createdAt).toLocaleString("en-UG")}
+                      {n.resolvedBy ? ` · resolved by ${n.resolvedBy.name}` : ""}
                     </p>
+                    {n.isDispute && n.disputeStatus !== "Resolved" ? (
+                      <div className="mt-2 flex gap-2">
+                        {n.disputeStatus === "Open" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            loading={resolveDisputeMutation.isPending}
+                            onClick={() => resolveDisputeMutation.mutate({ noteId: n.id, disputeStatus: "Investigating" })}
+                          >
+                            Mark investigating
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          loading={resolveDisputeMutation.isPending}
+                          onClick={() => resolveDisputeMutation.mutate({ noteId: n.id, disputeStatus: "Resolved" })}
+                        >
+                          Mark resolved
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -626,7 +808,108 @@ export function LoanDetail({ loanId }: { loanId: string }) {
             </div>
           </div>
         </TabsContent>
+
+        <TabsContent value="adjustments" className="mt-4">
+          {loan.adjustments.length === 0 ? (
+            <EmptyState
+              icon={Scale}
+              title="No adjustments"
+              description="Write-offs, reschedules, and interest waivers applied to this loan will appear here."
+            />
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-(--border-subtle) bg-(--bg-card)">
+              <div className="divide-y divide-(--border-subtle)">
+                {loan.adjustments.map((a) => (
+                  <div key={a.id} className="p-4 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-(--text-primary)">
+                        {a.type === "WriteOff"
+                          ? `Written off ${formatUGX(a.amount ?? 0)}`
+                          : a.type === "InterestWaiver"
+                            ? `Waived ${formatUGX(a.amount ?? 0)} interest`
+                            : `Rescheduled ${a.previousRepaymentPeriodMonths} → ${a.newRepaymentPeriodMonths} months`}
+                      </span>
+                      <span className="text-xs text-(--text-secondary)">
+                        {new Date(a.createdAt).toLocaleString("en-UG")}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-(--text-secondary)">&ldquo;{a.reason}&rdquo;</p>
+                    <p className="mt-1 text-xs text-(--text-muted)">by {a.requestedBy.name}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
+
+      <Dialog open={showAdjustDialog} onOpenChange={setShowAdjustDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restructure this loan</DialogTitle>
+            <DialogDescription>
+              Recorded permanently against this loan and cannot be undone. Choose carefully.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select value={adjustType} onValueChange={(v) => v && setAdjustType(v as typeof adjustType)}>
+              <SelectTrigger className="h-[42px] w-full rounded-sm border-(--border-subtle) px-3.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="WriteOff">Write off part or all of the balance</SelectItem>
+                <SelectItem value="Reschedule">Reschedule the repayment period</SelectItem>
+                <SelectItem value="InterestWaiver">Waive remaining interest</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {adjustType === "Reschedule" ? (
+              <div>
+                <label className="mb-1.5 block text-sm text-(--text-secondary)">
+                  New repayment period (months) — currently {loan.repaymentPeriodMonths}
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={adjustNewPeriod || ""}
+                  onChange={(e) => setAdjustNewPeriod(e.target.valueAsNumber || 0)}
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1.5 block text-sm text-(--text-secondary)">
+                  {adjustType === "WriteOff" ? "Amount to write off" : "Interest amount to waive"} — outstanding
+                  principal {formatUGX(principalOutstandingTotal)}, outstanding interest{" "}
+                  {formatUGX(interestOutstandingTotal)}
+                </label>
+                <CurrencyInput value={adjustAmount} onChange={(v) => setAdjustAmount(v ?? 0)} />
+              </div>
+            )}
+
+            <Textarea
+              placeholder="Reason (required)"
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowAdjustDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={adjustMutation.isPending}
+              disabled={
+                adjustReason.trim().length < 10 ||
+                (adjustType === "Reschedule" ? adjustNewPeriod < 1 : adjustAmount <= 0)
+              }
+              onClick={() => adjustMutation.mutate()}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
