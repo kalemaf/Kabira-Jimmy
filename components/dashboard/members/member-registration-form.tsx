@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { useMutation } from "@tanstack/react-query"
+import { useQuery, useMutation } from "@tanstack/react-query"
 import { useForm, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
@@ -28,7 +28,7 @@ import {
 import { SearchableSelect } from "@/components/searchable-select"
 import { FileUploadField } from "@/components/dashboard/file-upload-field"
 import { useBranchOptions } from "@/hooks/use-branch-options"
-import { memberSchema, type MemberInput } from "@/lib/schemas/member"
+import { memberSchema, memberEditSchema, type MemberInput } from "@/lib/schemas/member"
 import { memberDocumentTypes, type MemberDocumentInput } from "@/lib/schemas/member-document"
 
 // dob uses z.coerce.date() in the shared schema (it must accept a string
@@ -45,13 +45,14 @@ const DOCUMENT_LABELS: Record<(typeof memberDocumentTypes)[number], string> = {
   MembershipAgreement: "Membership agreement",
 }
 
-export function MemberRegistrationForm() {
+export function MemberForm({ memberId }: { memberId?: string }) {
   const router = useRouter()
+  const isEdit = !!memberId
   const { options: branchOptions } = useBranchOptions()
   const [documents, setDocuments] = React.useState<Record<string, string | undefined>>({})
 
   const form = useForm<MemberFormValues>({
-    resolver: zodResolver(memberSchema) as unknown as Resolver<MemberFormValues>,
+    resolver: zodResolver(isEdit ? memberEditSchema : memberSchema) as unknown as Resolver<MemberFormValues>,
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -72,16 +73,43 @@ export function MemberRegistrationForm() {
     },
   })
 
+  const { data: existing, isLoading: isLoadingExisting } = useQuery({
+    queryKey: ["member", memberId],
+    queryFn: async () => {
+      const res = await fetch(`/api/members/${memberId}`)
+      if (!res.ok) throw new Error("Failed to load member")
+      return res.json() as Promise<MemberFormValues & { dob: string | null }>
+    },
+    enabled: isEdit,
+  })
+
+  React.useEffect(() => {
+    if (existing) {
+      form.reset({
+        ...existing,
+        email: existing.email ?? "",
+        nin: existing.nin ?? "",
+        employer: existing.employer ?? "",
+        subCounty: existing.subCounty ?? "",
+        village: existing.village ?? "",
+        emergencyContact: existing.emergencyContact ?? "",
+        photoUrl: existing.photoUrl ?? "",
+        signatureUrl: existing.signatureUrl ?? "",
+        dob: existing.dob ? new Date(existing.dob) : undefined,
+      })
+    }
+  }, [existing, form])
+
   const mutation = useMutation({
     mutationFn: async (values: MemberFormValues) => {
-      const res = await fetch("/api/members", {
-        method: "POST",
+      const res = await fetch(isEdit ? `/api/members/${memberId}` : "/api/members", {
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error?.formErrors?.[0] ?? body.error ?? "Failed to register member")
+        throw new Error(body.error?.formErrors?.[0] ?? body.error ?? "Failed to save member")
       }
       return res.json() as Promise<{ id: string }>
     },
@@ -101,11 +129,15 @@ export function MemberRegistrationForm() {
         )
       )
 
-      toast.success("Member registered")
+      toast.success(isEdit ? "Member updated" : "Member registered")
       router.push(`/dashboard/members/${member.id}`)
     },
     onError: (err: Error) => toast.error(err.message),
   })
+
+  if (isEdit && isLoadingExisting) {
+    return <div className="h-96 max-w-3xl animate-pulse rounded-lg bg-(--bg-card)" />
+  }
 
   return (
     <Form {...form}>
@@ -381,7 +413,7 @@ export function MemberRegistrationForm() {
               render={({ field }) => (
                 <div>
                   <FileUploadField
-                    label="Passport photo *"
+                    label={isEdit ? "Passport photo" : "Passport photo *"}
                     value={field.value}
                     onChange={(url) => field.onChange(url ?? "")}
                     accept="image/*"
@@ -396,7 +428,7 @@ export function MemberRegistrationForm() {
               render={({ field }) => (
                 <div>
                   <FileUploadField
-                    label="Signature *"
+                    label={isEdit ? "Signature" : "Signature *"}
                     value={field.value}
                     onChange={(url) => field.onChange(url ?? "")}
                     accept="image/*"
@@ -419,11 +451,15 @@ export function MemberRegistrationForm() {
         </section>
 
         <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={() => router.push("/dashboard/members")}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => router.push(isEdit ? `/dashboard/members/${memberId}` : "/dashboard/members")}
+          >
             Cancel
           </Button>
           <Button type="submit" loading={mutation.isPending}>
-            Register member
+            {isEdit ? "Save changes" : "Register member"}
           </Button>
         </div>
       </form>

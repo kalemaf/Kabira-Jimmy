@@ -1,9 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { FileText, PiggyBank, HandCoins, ShieldCheck } from "lucide-react"
+import { FileText, PiggyBank, HandCoins, ShieldCheck, Pencil } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { MemberFreezeToggle } from "@/components/dashboard/members/member-freeze-toggle"
@@ -97,6 +98,7 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
 
 export function MemberProfileTabs({ member, role }: { member: MemberDetail; role: StaffRole }) {
   const canManageFreeze = role === "SuperAdmin" || role === "Manager"
+  const canEdit = ["SuperAdmin", "Manager", "Secretary", "LoanOfficer"].includes(role)
 
   return (
     <div className="space-y-6">
@@ -117,9 +119,23 @@ export function MemberProfileTabs({ member, role }: { member: MemberDetail; role
             <span className="text-xs text-(--text-secondary)">{member.branch.name}</span>
           </div>
         </div>
-        {canManageFreeze ? (
-          <MemberFreezeToggle memberId={member.id} withdrawalsFrozen={member.withdrawalsFrozen} frozenReason={member.frozenReason} />
-        ) : null}
+        <div className="flex items-center gap-2">
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href={`/dashboard/members/${member.id}/edit`} />}
+              nativeButton={false}
+              className="gap-1.5"
+            >
+              <Pencil className="size-3.5" />
+              Edit
+            </Button>
+          ) : null}
+          {canManageFreeze ? (
+            <MemberFreezeToggle memberId={member.id} withdrawalsFrozen={member.withdrawalsFrozen} frozenReason={member.frozenReason} />
+          ) : null}
+        </div>
       </div>
 
       <Tabs defaultValue="summary">

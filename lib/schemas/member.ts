@@ -28,6 +28,18 @@ export const memberSchema = z.object({
 
 export type MemberInput = z.infer<typeof memberSchema>;
 
+// Editing an existing member reuses memberSchema for every field except
+// photo/signature: registration requires both up front, but a member
+// created before that rule existed (or via prisma/seed.ts) can genuinely
+// have neither yet, and the whole point of editing is filling gaps in
+// incrementally — a photo shouldn't gate saving an email address. The PATCH
+// route already treats an empty string as "clear to null" for these two
+// fields, so this just matches what the server already accepts.
+export const memberEditSchema = memberSchema.extend({
+  photoUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
+  signatureUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
+});
+
 export const memberStatusSchema = z.object({
   status: z.enum(["Active", "Inactive", "Suspended"]),
 });

@@ -8,22 +8,23 @@ import { MemberForm } from "@/components/dashboard/members/member-registration-f
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StaffRole } from "@/components/dashboard/nav-config";
 
-export default async function NewMemberPage() {
+export default async function EditMemberPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
   const role = (session!.user as { role?: StaffRole }).role;
 
   if (!role || !["SuperAdmin", "Manager", "Secretary", "LoanOfficer"].includes(role)) {
-    redirect("/dashboard/members");
+    redirect(`/dashboard/members/${id}`);
   }
 
   return (
     <>
       <PageHeader
-        title="New member"
+        title="Edit member"
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Members", href: "/dashboard/members" },
-          { label: "New" },
+          { label: "Edit" },
         ]}
         user={{
           name: session!.user.name,
@@ -33,9 +34,9 @@ export default async function NewMemberPage() {
         }}
       />
       <main className="flex-1 px-4 py-6 md:px-8">
-        <ErrorBoundary fallbackTitle="Couldn't load the registration form">
+        <ErrorBoundary fallbackTitle="Couldn't load the member">
           <Suspense fallback={<Skeleton className="h-[600px] w-full max-w-3xl rounded-lg" />}>
-            <MemberForm />
+            <MemberForm memberId={id} />
           </Suspense>
         </ErrorBoundary>
       </main>
