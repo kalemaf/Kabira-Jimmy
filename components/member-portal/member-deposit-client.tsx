@@ -6,8 +6,9 @@ import { useQuery, useMutation } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { Smartphone, Landmark, PiggyBank, CheckCircle2 } from "lucide-react"
+import { Landmark, PiggyBank, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { MobileMoneyBadges } from "@/components/ui/mobile-money-badges"
 import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import { PhoneInput } from "@/components/ui/phone-input"
@@ -18,26 +19,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { formatUGX } from "@/lib/utils"
-import { memberDepositSchema, type MemberDepositInput } from "@/lib/schemas/member-savings"
+import {
+  memberDepositSchema,
+  type MemberDepositInput,
+} from "@/lib/schemas/member-savings"
 
-type SavingsAccount = { id: string; accountNumber: string; type: "Daily" | "Fixed" | "Shares"; balance: number }
+type SavingsAccount = {
+  id: string
+  accountNumber: string
+  type: "Daily" | "Fixed" | "Shares"
+  balance: number
+}
 type Response = { data: SavingsAccount[] }
 
 const CHANNELS = [
   {
     value: "MobileMoney" as const,
     label: "Mobile Money",
-    description: "MTN or Airtel — you'll get a prompt on your phone to approve the payment.",
-    icon: Smartphone,
+    description:
+      "MTN or Airtel — you'll get a prompt on your phone to approve the payment.",
   },
   {
     value: "BankTransfer" as const,
     label: "Bank Transfer",
-    description: "Already transferred via bank? Record the reference and a staff member will confirm it.",
-    icon: Landmark,
+    description:
+      "Already transferred via bank? Record the reference and a staff member will confirm it.",
   },
 ]
 
@@ -45,8 +61,13 @@ export function MemberDepositClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedAccountId = searchParams.get("accountId") ?? ""
-  const [channel, setChannel] = React.useState<"MobileMoney" | "BankTransfer">("MobileMoney")
-  const [result, setResult] = React.useState<{ status: string; message: string } | null>(null)
+  const [channel, setChannel] = React.useState<"MobileMoney" | "BankTransfer">(
+    "MobileMoney"
+  )
+  const [result, setResult] = React.useState<{
+    status: string
+    message: string
+  } | null>(null)
 
   const { data: response, isLoading } = useQuery({
     queryKey: ["member-savings-accounts"],
@@ -70,6 +91,9 @@ export function MemberDepositClient() {
     } as MemberDepositInput,
   })
 
+  const selectedAccountId = form.watch("savingsAccountId")
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId)
+
   React.useEffect(() => {
     if (!preselectedAccountId && accounts.length === 1) {
       form.setValue("savingsAccountId", accounts[0].id)
@@ -84,7 +108,12 @@ export function MemberDepositClient() {
     form.reset(
       next === "MobileMoney"
         ? { savingsAccountId, amount, method: "MobileMoney", phone: "" }
-        : { savingsAccountId, amount, method: "BankTransfer", bankReference: "" }
+        : {
+            savingsAccountId,
+            amount,
+            method: "BankTransfer",
+            bankReference: "",
+          }
     )
   }
 
@@ -97,15 +126,19 @@ export function MemberDepositClient() {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error?.formErrors?.[0] ?? body.error ?? "Deposit failed")
+        throw new Error(
+          body.error?.formErrors?.[0] ?? body.error ?? "Deposit failed"
+        )
       }
       return res.json()
     },
-    onSuccess: (data) => setResult({ status: data.status, message: data.message }),
+    onSuccess: (data) =>
+      setResult({ status: data.status, message: data.message }),
     onError: (err: Error) => toast.error(err.message),
   })
 
-  if (isLoading) return <div className="h-64 animate-pulse rounded-lg bg-(--bg-card)" />
+  if (isLoading)
+    return <div className="h-64 animate-pulse rounded-lg bg-(--bg-card)" />
 
   if (accounts.length === 0) {
     return (
@@ -120,21 +153,36 @@ export function MemberDepositClient() {
   if (result) {
     return (
       <div className="mx-auto max-w-md rounded-lg border border-(--border-subtle) bg-(--bg-card) p-8 text-center">
-        <CheckCircle2 className="mx-auto size-12 text-(--success-600)" strokeWidth={1.5} />
-        <h2 className="mt-4 text-[17px] font-semibold text-(--text-primary)">Deposit submitted</h2>
+        <CheckCircle2
+          className="mx-auto size-12 text-(--success-600)"
+          strokeWidth={1.5}
+        />
+        <h2 className="mt-4 text-[17px] font-semibold text-(--text-primary)">
+          Deposit submitted
+        </h2>
         <p className="mt-2 text-sm text-(--text-secondary)">{result.message}</p>
         <div className="mt-6 flex justify-center gap-3">
-          <Button variant="outline" onClick={() => { setResult(null); form.reset() }}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setResult(null)
+              form.reset()
+            }}
+          >
             Make another deposit
           </Button>
-          <Button onClick={() => router.push("/member-portal/dashboard/savings")}>View savings</Button>
+          <Button
+            onClick={() => router.push("/member-portal/dashboard/savings")}
+          >
+            View savings
+          </Button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
+    <div className="mx-auto max-w-lg space-y-6 rounded-2xl border border-(--border-subtle) bg-(--bg-card) p-6 shadow-sm sm:p-8">
       <div>
         <p className="mb-2 text-[13px] font-medium text-(--text-secondary)">
           Deposit into <span className="text-(--error-600)">*</span>
@@ -156,30 +204,67 @@ export function MemberDepositClient() {
         </Select>
       </div>
 
+      {selectedAccount && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-(--border-subtle) bg-(--accent-soft) p-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-(--bg-card) text-(--brand-blue)">
+              <PiggyBank className="size-5" strokeWidth={1.75} />
+            </span>
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.04em] text-(--text-secondary) uppercase">
+                Current balance · {selectedAccount.type}
+              </p>
+              <p className="text-[13px] text-(--text-muted)">
+                {selectedAccount.accountNumber}
+              </p>
+            </div>
+          </div>
+          <p className="text-[22px] leading-[1.1] font-bold text-(--text-primary) tabular-nums">
+            {formatUGX(selectedAccount.balance)}
+          </p>
+        </div>
+      )}
+
       <div>
-        <p className="mb-2 text-[13px] font-medium text-(--text-secondary)">How are you paying?</p>
+        <p className="mb-2 text-[13px] font-medium text-(--text-secondary)">
+          How are you paying?
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {CHANNELS.map((c) => (
             <button
               key={c.value}
               type="button"
               onClick={() => switchChannel(c.value)}
-              className={`flex flex-col items-start gap-1.5 rounded-lg border p-4 text-left transition-colors ${
+              className={`flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors ${
                 channel === c.value
                   ? "border-(--accent-500) bg-(--accent-soft)"
                   : "border-(--border-subtle) bg-(--bg-card) hover:bg-(--bg-card-hover)"
               }`}
             >
-              <c.icon className={`size-5 ${channel === c.value ? "text-(--accent-500)" : "text-(--text-muted)"}`} strokeWidth={1.75} />
-              <span className="text-sm font-semibold text-(--text-primary)">{c.label}</span>
-              <span className="text-xs text-(--text-secondary)">{c.description}</span>
+              {c.value === "MobileMoney" ? (
+                <MobileMoneyBadges />
+              ) : (
+                <Landmark
+                  className={`size-5 ${channel === c.value ? "text-(--accent-500)" : "text-(--text-muted)"}`}
+                  strokeWidth={1.75}
+                />
+              )}
+              <span className="text-sm font-semibold text-(--text-primary)">
+                {c.label}
+              </span>
+              <span className="text-xs text-(--text-secondary)">
+                {c.description}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit((values) => mutation.mutate(values))} className="space-y-5">
+        <form
+          onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
+          className="space-y-5"
+        >
           <FormField
             control={form.control}
             name="amount"
@@ -187,7 +272,10 @@ export function MemberDepositClient() {
               <FormItem>
                 <FormLabel required>Amount</FormLabel>
                 <FormControl>
-                  <CurrencyInput value={field.value} onChange={(v) => field.onChange(v ?? 0)} />
+                  <CurrencyInput
+                    value={field.value}
+                    onChange={(v) => field.onChange(v ?? 0)}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -216,7 +304,10 @@ export function MemberDepositClient() {
                 <FormItem>
                   <FormLabel required>Bank transfer reference</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. transaction reference from your bank slip" {...field} />
+                    <Input
+                      placeholder="e.g. transaction reference from your bank slip"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -224,8 +315,15 @@ export function MemberDepositClient() {
             />
           )}
 
-          <Button type="submit" className="w-full" loading={mutation.isPending} disabled={!form.watch("savingsAccountId")}>
-            {channel === "MobileMoney" ? "Send Mobile Money prompt" : "Submit for confirmation"}
+          <Button
+            type="submit"
+            className="w-full"
+            loading={mutation.isPending}
+            disabled={!form.watch("savingsAccountId")}
+          >
+            {channel === "MobileMoney"
+              ? "Send Mobile Money prompt"
+              : "Submit for confirmation"}
           </Button>
         </form>
       </Form>
