@@ -264,21 +264,76 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="px-4 py-12 md:px-8">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 sm:flex-row">
-          <Logo />
-          <nav className="flex items-center gap-6">
-            <Link href="/auth/sign-in" className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)">
-              Staff login
-            </Link>
-            <Link href="/member-portal/login" className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)">
-              Member portal
-            </Link>
-          </nav>
+      <footer className="border-t border-(--border-subtle) px-4 py-16 md:px-8">
+        <div className="mx-auto max-w-[1200px]">
+          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <Link href="/" className="flex items-center gap-2.5">
+                <Logo />
+                <span className="text-[17px] font-bold tracking-[-0.01em] text-(--text-primary)">nexcgen</span>
+              </Link>
+              <p className="mt-3 max-w-[220px] text-sm leading-[1.55] text-(--text-secondary)">
+                Loan &amp; savings management, run with discipline.
+              </p>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-(--text-primary)">Product</h4>
+              <nav className="mt-3 flex flex-col gap-2.5">
+                <a href="#features" className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+                  Features
+                </a>
+                <a href="#how-it-works" className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+                  How it works
+                </a>
+                <a href="#security" className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+                  Security
+                </a>
+              </nav>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-(--text-primary)">Access</h4>
+              <nav className="mt-3 flex flex-col gap-2.5">
+                <Link href="/auth/sign-in" className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+                  Staff login
+                </Link>
+                <Link href="/member-portal/login" className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+                  Member portal
+                </Link>
+              </nav>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-(--text-primary)">Contact</h4>
+              <nav className="mt-3 flex flex-col gap-2.5">
+                <a
+                  href="https://www.efficraftconsultants.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                >
+                  www.efficraftconsultants.com
+                </a>
+                <a
+                  href="mailto:info@kfmms.com"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                >
+                  info@kfmms.com
+                </a>
+              </nav>
+            </div>
+          </div>
+
+          <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-(--border-subtle) pt-8 text-center sm:flex-row sm:text-left">
+            <p className="text-[13px] text-(--text-secondary)">
+              Managed by <span className="font-medium text-(--text-primary)">Efficraft Consultants Limited</span>
+            </p>
+            <p className="text-[13px] text-(--text-secondary)">
+              &copy; {new Date().getFullYear()} Efficraft Consultants Limited. All rights reserved.
+            </p>
+          </div>
         </div>
-        <p className="mt-8 text-center text-[13px] text-(--text-secondary)">
-          Nexcgen — loan &amp; savings management, run with discipline.
-        </p>
       </footer>
     </div>
   )
