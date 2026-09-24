@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
@@ -205,21 +206,19 @@ export function MemberDepositClient() {
       </div>
 
       {selectedAccount && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-(--border-subtle) bg-(--accent-soft) p-4">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-(--brand-green) p-4">
           <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-(--bg-card) text-(--brand-blue)">
-              <PiggyBank className="size-5" strokeWidth={1.75} />
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white p-1.5">
+              <Image src="/nexcgen.png" alt="" width={28} height={28} className="size-full object-contain" />
             </span>
             <div>
-              <p className="text-[11px] font-semibold tracking-[0.04em] text-(--text-secondary) uppercase">
+              <p className="text-[11px] font-semibold tracking-[0.04em] text-white/80 uppercase">
                 Current balance · {selectedAccount.type}
               </p>
-              <p className="text-[13px] text-(--text-muted)">
-                {selectedAccount.accountNumber}
-              </p>
+              <p className="text-[13px] text-white/70">{selectedAccount.accountNumber}</p>
             </div>
           </div>
-          <p className="text-[22px] leading-[1.1] font-bold text-(--text-primary) tabular-nums">
+          <p className="text-[22px] leading-[1.1] font-bold text-white tabular-nums">
             {formatUGX(selectedAccount.balance)}
           </p>
         </div>
