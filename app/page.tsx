@@ -331,7 +331,7 @@ export default function LandingPage() {
                   <span>Status</span>
                 </div>
                 {[
-                  { name: "Akoth Judith", principal: "UGX 600,000", due: "02/10/2026", status: "Active" },
+                  { name: "Jimmy", principal: "UGX 600,000", due: "02/10/2026", status: "Active" },
                   { name: "Kabira Jimmy", principal: "UGX 20,000", due: "30/09/2026", status: "Due in 4d" },
                 ].map((row) => (
                   <div
