@@ -458,6 +458,9 @@ model LoanApplication {
   // PendingDisbursement until then, so a gateway failure never leaves a
   // half-disbursed loan on the books.
   disbursementTransactionRef String?
+  // The Mobile Money number a MobileMoney disbursement was sent to — recorded
+  // at initiation time so it survives independently of the audit log.
+  disbursementPhone          String?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -833,6 +836,11 @@ model SavingsTransaction {
   // DGateway transaction reference (Mobile Money) or the bank's own
   // reference number the member typed in (Bank Transfer).
   transactionId    String?
+  // The Mobile Money number this deposit/withdrawal actually moved through —
+  // set only for method=MobileMoney. Not always the member's own registered
+  // phone (a deposit can be made from any MTN/Airtel line), so this is kept
+  // as its own column rather than assumed to equal Member.phone.
+  phone            String?
   // A deposit is either teller-recorded (staffId set) or member self-service
   // (memberUserId set, channel=MemberPortal) — never both. staffId is
   // nullable specifically to allow the latter; the channel field is the

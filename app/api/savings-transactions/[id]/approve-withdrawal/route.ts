@@ -77,6 +77,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       data: {
         status: "Pending",
         transactionId: result.transactionRef,
+        phone: transaction.savingsAccount.member.phone,
         approvedByUserId: session.user.id,
         approvedAt: new Date(),
       },

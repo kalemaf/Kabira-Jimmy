@@ -40,6 +40,7 @@ type SavingsDetailData = {
     status: "PendingApproval" | "Pending" | "Confirmed" | "Failed"
     method: "Cash" | "MobileMoney" | "BankTransfer"
     transactionId: string | null
+    phone: string | null
     penaltyAmount: number
     staff: { name: string } | null
     memberUser: { name: string } | null
@@ -337,6 +338,7 @@ export function SavingsDetail({
                 <div>
                   <p className="text-(--text-primary)">
                     {formatUGX(t.amount)} · {t.method === "MobileMoney" ? "Mobile Money" : t.method === "BankTransfer" ? "Bank Transfer" : "Cash"}
+                    {t.method === "MobileMoney" && t.phone ? ` (${t.phone})` : ""}
                   </p>
                   <p className="text-xs text-(--text-secondary)">
                     {collectedByLabel(t)} · {t.transactionId ?? "—"} · {new Date(t.createdAt).toLocaleString("en-UG")}
@@ -396,6 +398,7 @@ export function SavingsDetail({
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Method</TableHead>
                 <TableHead>Staff</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
@@ -408,6 +411,12 @@ export function SavingsDetail({
                   <TableCell>{new Date(t.createdAt).toLocaleString("en-UG")}</TableCell>
                   <TableCell>
                     <StatusBadge status={t.type} tone={t.type === "Withdrawal" ? "warning" : "success"} />
+                  </TableCell>
+                  <TableCell className="whitespace-normal">
+                    {t.method === "MobileMoney" ? "Mobile Money" : t.method === "BankTransfer" ? "Bank Transfer" : "Cash"}
+                    {t.method === "MobileMoney" && t.phone ? (
+                      <span className="block text-xs text-(--text-secondary)">{t.phone}</span>
+                    ) : null}
                   </TableCell>
                   <TableCell className="whitespace-normal">{collectedByLabel(t)}</TableCell>
                   <TableCell>

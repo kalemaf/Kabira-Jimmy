@@ -79,6 +79,7 @@ export async function POST(req: Request) {
           status: "Pending",
           method: "MobileMoney",
           transactionId: result.transactionRef,
+          phone: parsed.data.phone,
           channel: "MemberPortal",
           memberUserId: session.user.id,
         },

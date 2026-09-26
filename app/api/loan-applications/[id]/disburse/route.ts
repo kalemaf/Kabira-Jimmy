@@ -78,7 +78,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       await db.loanApplication.update({
         where: { id },
-        data: { disbursementTransactionRef: result.transactionRef, disbursementInitiatedByUserId: session.user.id },
+        data: {
+          disbursementTransactionRef: result.transactionRef,
+          disbursementInitiatedByUserId: session.user.id,
+          disbursementPhone: phone,
+        },
       });
 
       await writeAuditLog({
