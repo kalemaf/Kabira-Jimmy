@@ -64,6 +64,7 @@ export async function POST(req: Request) {
     try {
       const result = await collectPayment({
         phone: parsed.data.phone,
+        network: parsed.data.network,
         amountUgx: amount,
         reference,
         narration: `Nexcgen savings deposit — ${account.member.memberNumber}`,
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
           method: "MobileMoney",
           transactionId: result.transactionRef,
           phone: parsed.data.phone,
+          network: parsed.data.network,
           channel: "MemberPortal",
           memberUserId: session.user.id,
         },

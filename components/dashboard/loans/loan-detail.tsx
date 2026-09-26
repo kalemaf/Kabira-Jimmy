@@ -54,6 +54,7 @@ type LoanDetailData = {
   disbursedAt: string
   disbursementMethod: string
   disbursementPhone: string | null
+  disbursementNetwork: "MTN" | "Airtel" | null
   status: string
   member: { id: string; firstName: string; lastName: string; memberNumber: string; photoUrl: string | null }
   branch: { name: string }
@@ -549,7 +550,11 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
               <OverviewRow label="Disbursement method" value={loan.disbursementMethod} />
               <OverviewRow
                 label="Disbursed to (phone)"
-                value={loan.disbursementMethod === "MobileMoney" ? loan.disbursementPhone : "N/A — " + loan.disbursementMethod}
+                value={
+                  loan.disbursementMethod === "MobileMoney"
+                    ? `${loan.disbursementPhone ?? "—"}${loan.disbursementNetwork ? ` (${loan.disbursementNetwork})` : ""}`
+                    : "N/A — " + loan.disbursementMethod
+                }
               />
             </div>
           </div>

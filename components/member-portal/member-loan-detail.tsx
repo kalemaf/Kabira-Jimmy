@@ -9,6 +9,7 @@ import { Download, Wallet, HandCoins } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import { PhoneInput } from "@/components/ui/phone-input"
+import { NetworkToggle } from "@/components/ui/mobile-money-badges"
 import {
   Dialog,
   DialogContent,
@@ -74,7 +75,7 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
 
   const form = useForm<MemberRepaymentInput>({
     resolver: zodResolver(memberRepaymentSchema),
-    defaultValues: { amount: 0, phone: "" },
+    defaultValues: { amount: 0, phone: "", network: undefined },
   })
 
   const [reconcilingId, setReconcilingId] = React.useState<string | null>(null)
@@ -114,7 +115,7 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
     onSuccess: (result) => {
       toast.success(result.message ?? "Repayment initiated")
       setRepayOpen(false)
-      form.reset({ amount: 0, phone: "" })
+      form.reset({ amount: 0, phone: "", network: undefined })
       queryClient.invalidateQueries({ queryKey: ["member-loan", loanId] })
     },
     onError: (err: Error) => toast.error(err.message),
@@ -307,6 +308,19 @@ export function MemberLoanDetail({ loanId }: { loanId: string }) {
                     <FormLabel required>Mobile Money number</FormLabel>
                     <FormControl>
                       <PhoneInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="network"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel required>Network</FormLabel>
+                    <FormControl>
+                      <NetworkToggle value={field.value} onChange={field.onChange} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

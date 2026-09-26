@@ -59,7 +59,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  const { disbursementMethod, comments, phone } = parsed.data;
+  const { disbursementMethod, comments, phone, network } = parsed.data;
   const ipAddress =
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? req.headers.get("x-real-ip") ?? null;
 
@@ -71,6 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     try {
       const result = await dgatewayDisburse({
         phone: phone!,
+        network,
         amountUgx: application.amount,
         reference,
         narration: `Nexcgen loan disbursement — ${application.id}`,
@@ -82,6 +83,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           disbursementTransactionRef: result.transactionRef,
           disbursementInitiatedByUserId: session.user.id,
           disbursementPhone: phone,
+          disbursementNetwork: network,
         },
       });
 

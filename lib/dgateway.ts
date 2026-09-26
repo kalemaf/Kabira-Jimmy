@@ -115,6 +115,7 @@ async function rohoPost(config: { apiUrl: string; apiKey: string }, path: string
 /** Collects a payment FROM a member's mobile money wallet (loan repayment or savings deposit). */
 export async function collectPayment(params: {
   phone: string;
+  network?: "MTN" | "Airtel";
   amountUgx: number;
   reference: string;
   narration?: string;
@@ -130,6 +131,13 @@ export async function collectPayment(params: {
 
   const data = await rohoPost(config, "/api/v1/collect", {
     phone: params.phone,
+    // Sent alongside phone rather than relying on RohoPay to infer it from
+    // the prefix — Uganda's number portability means a phone's prefix
+    // doesn't reliably identify MTN vs Airtel. Field name (`provider`)
+    // mirrors what RohoPay's own /collect response already returns
+    // (data.provider) — unconfirmed as a REQUEST field since /guides
+    // 404'd, so this is sent best-effort and simply ignored if unrecognized.
+    ...(params.network ? { provider: params.network.toUpperCase() } : {}),
     amount: params.amountUgx,
     currency: "UGX",
     reference: params.reference,
@@ -167,6 +175,7 @@ export async function collectPayment(params: {
  */
 export async function disburse(params: {
   phone: string;
+  network?: "MTN" | "Airtel";
   amountUgx: number;
   reference: string;
   narration?: string;
@@ -182,6 +191,8 @@ export async function disburse(params: {
 
   const data = await rohoPost(config, "/api/v1/disburse", {
     phone: params.phone,
+    // See collectPayment()'s comment — same reasoning applies to payouts.
+    ...(params.network ? { provider: params.network.toUpperCase() } : {}),
     amount: params.amountUgx,
     currency: "UGX",
     reference: params.reference,

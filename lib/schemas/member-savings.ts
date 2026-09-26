@@ -17,6 +17,10 @@ export const memberDepositSchema = z.discriminatedUnion("method", [
     amount: z.number().int().min(1, "Amount must be positive"),
     method: z.literal("MobileMoney"),
     phone: z.string().regex(/^\+256\d{9}$/, "Enter a valid Uganda phone number"),
+    // Uganda's Mobile Money prefixes don't reliably identify the network
+    // (numbers get ported between MTN and Airtel), so this can't be
+    // inferred from the phone number — it has to be picked explicitly.
+    network: z.enum(["MTN", "Airtel"], { message: "Select MTN or Airtel" }),
   }),
   z.object({
     savingsAccountId: z.string().min(1, "Account is required"),

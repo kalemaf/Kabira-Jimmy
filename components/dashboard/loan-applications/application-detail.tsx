@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { PhoneInput } from "@/components/ui/phone-input"
+import { NetworkToggle, type MobileMoneyNetwork } from "@/components/ui/mobile-money-badges"
 import {
   Dialog,
   DialogContent,
@@ -72,6 +73,7 @@ export function ApplicationDetail({
   const [comments, setComments] = React.useState("")
   const [disbursementMethod, setDisbursementMethod] = React.useState<"Cash" | "Bank" | "MobileMoney" | null>(null)
   const [phone, setPhone] = React.useState("")
+  const [network, setNetwork] = React.useState<MobileMoneyNetwork | undefined>(undefined)
   const [confirmDisburse, setConfirmDisburse] = React.useState(false)
   const [confirmReverse, setConfirmReverse] = React.useState(false)
   const [reverseReason, setReverseReason] = React.useState("")
@@ -126,6 +128,7 @@ export function ApplicationDetail({
           disbursementMethod,
           comments: comments.trim() || undefined,
           phone: disbursementMethod === "MobileMoney" ? phone : undefined,
+          network: disbursementMethod === "MobileMoney" ? network : undefined,
         }),
       })
       if (!res.ok) {
@@ -377,6 +380,7 @@ export function ApplicationDetail({
               if (!v) return
               setDisbursementMethod(v as Exclude<typeof disbursementMethod, null>)
               setAttestedHandedOver(false)
+              setNetwork(undefined)
             }}
           >
             <SelectTrigger className="h-[42px] w-full rounded-sm border-(--border-subtle) px-3.5">
@@ -389,7 +393,10 @@ export function ApplicationDetail({
             </SelectContent>
           </Select>
           {disbursementMethod === "MobileMoney" ? (
-            <PhoneInput value={phone} onChange={setPhone} />
+            <>
+              <PhoneInput value={phone} onChange={setPhone} />
+              <NetworkToggle value={network} onChange={setNetwork} />
+            </>
           ) : null}
           {disbursementMethod === "Cash" || disbursementMethod === "Bank" ? (
             <label className="flex items-start gap-2 text-sm text-(--text-secondary)">
@@ -407,7 +414,7 @@ export function ApplicationDetail({
             <Button
               disabled={
                 !disbursementMethod ||
-                (disbursementMethod === "MobileMoney" && !phone) ||
+                (disbursementMethod === "MobileMoney" && (!phone || !network)) ||
                 ((disbursementMethod === "Cash" || disbursementMethod === "Bank") && !attestedHandedOver)
               }
               onClick={() => setConfirmDisburse(true)}
@@ -474,7 +481,7 @@ export function ApplicationDetail({
             <DialogTitle>Confirm disbursement</DialogTitle>
             <DialogDescription>
               {disbursementMethod === "MobileMoney"
-                ? `${formatUGX(application.amount)} will be sent to ${phone} via Mobile Money. This cannot be undone.`
+                ? `${formatUGX(application.amount)} will be sent to ${phone} (${network}) via Mobile Money. This cannot be undone.`
                 : `This records that ${formatUGX(application.amount)} was already handed to the member via ${disbursementMethod}. Only confirm if that has genuinely happened — this cannot be undone.`}
             </DialogDescription>
           </DialogHeader>

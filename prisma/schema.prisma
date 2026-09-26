@@ -461,6 +461,7 @@ model LoanApplication {
   // The Mobile Money number a MobileMoney disbursement was sent to — recorded
   // at initiation time so it survives independently of the audit log.
   disbursementPhone          String?
+  disbursementNetwork        MobileMoneyNetwork?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -690,6 +691,10 @@ model Repayment {
   status           RepaymentStatus @default(Confirmed)
   receiptNumber    String          @unique
   transactionId    String?
+  // The Mobile Money number this repayment was actually collected from —
+  // set only for method=MobileMoney.
+  phone            String?
+  network          MobileMoneyNetwork?
   // A repayment is either teller-recorded (collectorId set) or member
   // self-service (memberUserId set, channel=MemberPortal) — mirrors
   // SavingsTransaction's channel/memberUserId pattern exactly.
@@ -815,6 +820,15 @@ enum SavingsTransactionMethod {
   BankTransfer
 }
 
+// Uganda's Mobile Money prefixes aren't a reliable way to infer the network
+// (number portability means a 077x/078x number can have been ported off MTN
+// onto Airtel or vice versa) — so the network is captured explicitly at the
+// point someone enters a Mobile Money number, rather than guessed from it.
+enum MobileMoneyNetwork {
+  MTN
+  Airtel
+}
+
 model SavingsTransaction {
   id               String                 @id @default(cuid())
   savingsAccountId String
@@ -841,6 +855,7 @@ model SavingsTransaction {
   // phone (a deposit can be made from any MTN/Airtel line), so this is kept
   // as its own column rather than assumed to equal Member.phone.
   phone            String?
+  network          MobileMoneyNetwork?
   // A deposit is either teller-recorded (staffId set) or member self-service
   // (memberUserId set, channel=MemberPortal) — never both. staffId is
   // nullable specifically to allow the latter; the channel field is the

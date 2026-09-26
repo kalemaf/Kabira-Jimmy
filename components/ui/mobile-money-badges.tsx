@@ -50,3 +50,46 @@ export function MobileMoneyBadges({ className }: { className?: string }) {
     </span>
   )
 }
+
+export type MobileMoneyNetwork = "MTN" | "Airtel"
+
+/**
+ * Explicit MTN/Airtel picker for a Mobile Money number. Uganda's number
+ * portability means the phone prefix alone doesn't reliably say which
+ * network a number is on, so every Mobile Money form asks for this
+ * directly instead of guessing from the digits.
+ */
+export function NetworkToggle({
+  value,
+  onChange,
+  className,
+}: {
+  value: MobileMoneyNetwork | undefined
+  onChange: (value: MobileMoneyNetwork) => void
+  className?: string
+}) {
+  const options: { network: MobileMoneyNetwork; Badge: typeof MtnBadge }[] = [
+    { network: "MTN", Badge: MtnBadge },
+    { network: "Airtel", Badge: AirtelBadge },
+  ]
+  return (
+    <div className={cn("flex gap-2", className)}>
+      {options.map(({ network, Badge }) => (
+        <button
+          key={network}
+          type="button"
+          onClick={() => onChange(network)}
+          className={cn(
+            "rounded-md border-2 p-1 transition-colors",
+            value === network
+              ? "border-(--accent-500) bg-(--accent-soft)"
+              : "border-transparent opacity-60 hover:opacity-100"
+          )}
+          aria-pressed={value === network}
+        >
+          <Badge />
+        </button>
+      ))}
+    </div>
+  )
+}

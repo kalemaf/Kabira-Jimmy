@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { Landmark, PiggyBank, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { MobileMoneyBadges } from "@/components/ui/mobile-money-badges"
+import { MobileMoneyBadges, NetworkToggle } from "@/components/ui/mobile-money-badges"
 import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import { PhoneInput } from "@/components/ui/phone-input"
@@ -89,7 +89,8 @@ export function MemberDepositClient() {
       amount: 0,
       method: "MobileMoney",
       phone: "",
-    } as MemberDepositInput,
+      network: undefined,
+    } as unknown as MemberDepositInput,
   })
 
   const selectedAccountId = form.watch("savingsAccountId")
@@ -107,14 +108,14 @@ export function MemberDepositClient() {
     const savingsAccountId = form.getValues("savingsAccountId")
     const amount = form.getValues("amount")
     form.reset(
-      next === "MobileMoney"
-        ? { savingsAccountId, amount, method: "MobileMoney", phone: "" }
+      (next === "MobileMoney"
+        ? { savingsAccountId, amount, method: "MobileMoney", phone: "", network: undefined }
         : {
             savingsAccountId,
             amount,
             method: "BankTransfer",
             bankReference: "",
-          }
+          }) as unknown as MemberDepositInput
     )
   }
 
@@ -282,19 +283,34 @@ export function MemberDepositClient() {
           />
 
           {channel === "MobileMoney" ? (
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel required>Phone number</FormLabel>
-                  <FormControl>
-                    <PhoneInput value={field.value} onChange={field.onChange} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <>
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel required>Phone number</FormLabel>
+                    <FormControl>
+                      <PhoneInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="network"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel required>Network</FormLabel>
+                    <FormControl>
+                      <NetworkToggle value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
           ) : (
             <FormField
               control={form.control}

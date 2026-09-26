@@ -97,10 +97,17 @@ export const disbursementSchema = z
       .string()
       .regex(/^\+256\d{9}$/, "Enter a valid Uganda phone number")
       .optional(),
+    // Not inferable from the number itself — Uganda numbers get ported
+    // between networks — so it's picked explicitly rather than guessed.
+    network: z.enum(["MTN", "Airtel"]).optional(),
   })
   .refine((data) => data.disbursementMethod !== "MobileMoney" || !!data.phone, {
     message: "Phone number is required for Mobile Money disbursement",
     path: ["phone"],
+  })
+  .refine((data) => data.disbursementMethod !== "MobileMoney" || !!data.network, {
+    message: "Select MTN or Airtel for Mobile Money disbursement",
+    path: ["network"],
   });
 
 export type DisbursementInput = z.infer<typeof disbursementSchema>;

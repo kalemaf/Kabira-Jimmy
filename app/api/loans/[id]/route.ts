@@ -64,8 +64,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
       const disbursementPhone =
         loan.disbursementMethod === "MobileMoney" ? loan.loanApplication.disbursementPhone : null;
+      const disbursementNetwork =
+        loan.disbursementMethod === "MobileMoney" ? loan.loanApplication.disbursementNetwork : null;
 
-      return { ...loan, displayStatus, schedule, disbursementPhone };
+      return { ...loan, displayStatus, schedule, disbursementPhone, disbursementNetwork };
     },
     20
   );

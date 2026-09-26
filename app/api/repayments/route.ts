@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const parsed = createRepaymentSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { loanId, amountPaid, method, phone, transactionId } = parsed.data;
+  const { loanId, amountPaid, method, phone, network, transactionId } = parsed.data;
 
   const loan = await db.loan.findUnique({
     where: { id: loanId },
@@ -115,6 +115,7 @@ export async function POST(req: Request) {
     try {
       const result = await dgatewayCollect({
         phone: phone!,
+        network,
         amountUgx: amountToCharge,
         reference,
         narration: `Nexcgen loan repayment — ${loan.member.memberNumber}`,
@@ -132,6 +133,8 @@ export async function POST(req: Request) {
           status: "Pending",
           receiptNumber,
           transactionId: result.transactionRef,
+          phone,
+          network,
           collectorId: session.user.id,
           branchId: loan.branchId,
         },

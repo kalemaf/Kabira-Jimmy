@@ -10,6 +10,7 @@ import { Download, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import { PhoneInput } from "@/components/ui/phone-input"
+import { NetworkToggle } from "@/components/ui/mobile-money-badges"
 import {
   Select,
   SelectContent,
@@ -70,7 +71,7 @@ export function RepaymentCollection() {
 
   const form = useForm<CreateRepaymentInput>({
     resolver: zodResolver(createRepaymentSchema),
-    defaultValues: { loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", transactionId: "" },
+    defaultValues: { loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", network: undefined, transactionId: "" },
   })
 
   React.useEffect(() => {
@@ -111,11 +112,11 @@ export function RepaymentCollection() {
       queryClient.invalidateQueries({ queryKey: ["loan", selectedLoanId] })
       if (result.status === "pending") {
         toast.success(result.message ?? "Mobile Money collection initiated — awaiting confirmation")
-        form.reset({ loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", transactionId: "" })
+        form.reset({ loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", network: undefined, transactionId: "" })
       } else {
         toast.success(result.message ?? "Repayment recorded")
         setReceipt({ ...result.repayment, outstandingBalance: result.outstandingBalance });
-        form.reset({ loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", transactionId: "" })
+        form.reset({ loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", network: undefined, transactionId: "" })
       }
     },
     onError: (err: Error) => toast.error(err.message),
@@ -249,6 +250,19 @@ export function RepaymentCollection() {
                           <FormLabel>Phone number</FormLabel>
                           <FormControl>
                             <PhoneInput value={field.value} onChange={field.onChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="network"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Network</FormLabel>
+                          <FormControl>
+                            <NetworkToggle value={field.value} onChange={field.onChange} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

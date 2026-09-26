@@ -34,7 +34,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = await req.json();
   const parsed = memberRepaymentSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const { amount, phone } = parsed.data;
+  const { amount, phone, network } = parsed.data;
 
   const { id } = await params;
   const loan = await db.loan.findUnique({
@@ -79,6 +79,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const result = await collectPayment({
       phone,
+      network,
       amountUgx: amount,
       reference,
       narration: `Nexcgen loan repayment — ${loan.member.memberNumber}`,
@@ -95,6 +96,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         status: "Pending",
         receiptNumber,
         transactionId: result.transactionRef,
+        phone,
+        network,
         channel: "MemberPortal",
         memberUserId: session.user.id,
         branchId: loan.branchId,
