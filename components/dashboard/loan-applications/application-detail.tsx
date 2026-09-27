@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/dashboard/empty-state"
-import { formatUGX } from "@/lib/utils"
+import { formatUGX, detectMobileMoneyNetwork } from "@/lib/utils"
 import { STATUS_STAGE, STATUS_LABELS, STAGE_LABELS, canActAtStage, isApprovalStage, type ApplicationStatus } from "@/lib/loan-workflow"
 import type { StaffRole } from "@/components/dashboard/nav-config"
 
@@ -73,7 +73,12 @@ export function ApplicationDetail({
   const [comments, setComments] = React.useState("")
   const [disbursementMethod, setDisbursementMethod] = React.useState<"Cash" | "Bank" | "MobileMoney" | null>(null)
   const [phone, setPhone] = React.useState("")
+  // undefined until staff explicitly pick one — the derived `network` value
+  // below falls back to a phone-prefix guess (see detectMobileMoneyNetwork)
+  // only while this stays unset, so a manual pick always wins and is never
+  // silently overridden as they keep typing the number.
   const [network, setNetwork] = React.useState<MobileMoneyNetwork | undefined>(undefined)
+  const effectiveNetwork = network ?? detectMobileMoneyNetwork(phone)
   const [confirmDisburse, setConfirmDisburse] = React.useState(false)
   const [confirmReverse, setConfirmReverse] = React.useState(false)
   const [reverseReason, setReverseReason] = React.useState("")
@@ -128,7 +133,7 @@ export function ApplicationDetail({
           disbursementMethod,
           comments: comments.trim() || undefined,
           phone: disbursementMethod === "MobileMoney" ? phone : undefined,
-          network: disbursementMethod === "MobileMoney" ? network : undefined,
+          network: disbursementMethod === "MobileMoney" ? effectiveNetwork : undefined,
         }),
       })
       if (!res.ok) {
@@ -395,7 +400,7 @@ export function ApplicationDetail({
           {disbursementMethod === "MobileMoney" ? (
             <>
               <PhoneInput value={phone} onChange={setPhone} />
-              <NetworkToggle value={network} onChange={setNetwork} />
+              <NetworkToggle value={effectiveNetwork} onChange={setNetwork} />
             </>
           ) : null}
           {disbursementMethod === "Cash" || disbursementMethod === "Bank" ? (
@@ -414,7 +419,7 @@ export function ApplicationDetail({
             <Button
               disabled={
                 !disbursementMethod ||
-                (disbursementMethod === "MobileMoney" && (!phone || !network)) ||
+                (disbursementMethod === "MobileMoney" && (!phone || !effectiveNetwork)) ||
                 ((disbursementMethod === "Cash" || disbursementMethod === "Bank") && !attestedHandedOver)
               }
               onClick={() => setConfirmDisburse(true)}
@@ -481,7 +486,7 @@ export function ApplicationDetail({
             <DialogTitle>Confirm disbursement</DialogTitle>
             <DialogDescription>
               {disbursementMethod === "MobileMoney"
-                ? `${formatUGX(application.amount)} will be sent to ${phone} (${network}) via Mobile Money. This cannot be undone.`
+                ? `${formatUGX(application.amount)} will be sent to ${phone} (${effectiveNetwork}) via Mobile Money. This cannot be undone.`
                 : `This records that ${formatUGX(application.amount)} was already handed to the member via ${disbursementMethod}. Only confirm if that has genuinely happened — this cannot be undone.`}
             </DialogDescription>
           </DialogHeader>

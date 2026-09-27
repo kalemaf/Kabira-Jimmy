@@ -29,7 +29,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { EmptyState } from "@/components/dashboard/empty-state"
-import { formatUGX } from "@/lib/utils"
+import { formatUGX, detectMobileMoneyNetwork } from "@/lib/utils"
 import {
   memberDepositSchema,
   type MemberDepositInput,
@@ -124,8 +124,21 @@ export function MemberDepositClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts.length, preselectedAccountId, form])
 
+  // Pre-selects MTN/Airtel from the number's prefix as a convenience — never
+  // trusted outright (see detectMobileMoneyNetwork), so it stops overriding
+  // the moment the member touches the toggle themselves.
+  const networkTouchedRef = React.useRef(false)
+  const phoneValue = channel === "MobileMoney" ? form.watch("phone") : undefined
+  React.useEffect(() => {
+    if (channel !== "MobileMoney" || networkTouchedRef.current) return
+    const detected = detectMobileMoneyNetwork(phoneValue)
+    if (detected) form.setValue("network", detected, { shouldValidate: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phoneValue, channel])
+
   function switchChannel(next: "MobileMoney" | "BankTransfer") {
     setChannel(next)
+    networkTouchedRef.current = false
     const savingsAccountId = form.getValues("savingsAccountId")
     const amount = form.getValues("amount")
     form.reset(
@@ -325,7 +338,13 @@ export function MemberDepositClient() {
                   <FormItem>
                     <FormLabel required>Network</FormLabel>
                     <FormControl>
-                      <NetworkToggle value={field.value} onChange={field.onChange} />
+                      <NetworkToggle
+                        value={field.value}
+                        onChange={(v) => {
+                          networkTouchedRef.current = true
+                          field.onChange(v)
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

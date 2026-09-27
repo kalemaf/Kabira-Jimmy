@@ -30,7 +30,7 @@ import { SearchableSelect } from "@/components/searchable-select"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { useLoanOptions } from "@/hooks/use-loan-options"
 import { createRepaymentSchema, type CreateRepaymentInput } from "@/lib/schemas/repayment"
-import { formatUGX } from "@/lib/utils"
+import { formatUGX, detectMobileMoneyNetwork } from "@/lib/utils"
 import type { LoanDisplayStatus } from "@/lib/loan-status"
 
 type LoanSummary = {
@@ -80,6 +80,18 @@ export function RepaymentCollection() {
 
   const method = form.watch("method")
   const amountPaid = form.watch("amountPaid")
+  const repaymentPhoneValue = form.watch("phone")
+
+  // Pre-selects MTN/Airtel from the number's prefix as a convenience — never
+  // trusted outright (see detectMobileMoneyNetwork), so it stops overriding
+  // the moment staff touch the toggle themselves.
+  const networkTouchedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (method !== "MobileMoney" || networkTouchedRef.current) return
+    const detected = detectMobileMoneyNetwork(repaymentPhoneValue)
+    if (detected) form.setValue("network", detected, { shouldValidate: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repaymentPhoneValue, method])
 
   const { data: feePolicy } = useQuery({
     queryKey: ["repayment-fee-policy"],
@@ -110,6 +122,7 @@ export function RepaymentCollection() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["loan", selectedLoanId] })
+      networkTouchedRef.current = false
       if (result.status === "pending") {
         toast.success(result.message ?? "Mobile Money collection initiated — awaiting confirmation")
         form.reset({ loanId: selectedLoanId, amountPaid: 0, method: "Cash", phone: "", network: undefined, transactionId: "" })
@@ -262,7 +275,13 @@ export function RepaymentCollection() {
                         <FormItem>
                           <FormLabel>Network</FormLabel>
                           <FormControl>
-                            <NetworkToggle value={field.value} onChange={field.onChange} />
+                            <NetworkToggle
+                              value={field.value}
+                              onChange={(v) => {
+                                networkTouchedRef.current = true
+                                field.onChange(v)
+                              }}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
