@@ -7,7 +7,7 @@ import { useQuery, useMutation } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { Landmark, PiggyBank, CheckCircle2, Zap } from "lucide-react"
+import { Landmark, PiggyBank, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { MobileMoneyBadges, NetworkToggle } from "@/components/ui/mobile-money-badges"
 import { Input } from "@/components/ui/input"
@@ -51,14 +51,8 @@ const CHANNELS = [
       "MTN or Airtel — you'll get a prompt on your phone to approve the payment.",
   },
   {
-    value: "InstantBankTransfer" as const,
-    label: "Bank Transfer (Instant)",
-    description:
-      "Pay directly from your bank via RohoPay — confirmed automatically, no waiting for staff.",
-  },
-  {
     value: "BankTransfer" as const,
-    label: "Bank Transfer (Manual)",
+    label: "Bank Transfer",
     description:
       "Already transferred via bank? Record the reference and a staff member will confirm it.",
   },
@@ -68,7 +62,13 @@ export function MemberDepositClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedAccountId = searchParams.get("accountId") ?? ""
-  const [channel, setChannel] = React.useState<"MobileMoney" | "InstantBankTransfer" | "BankTransfer">(
+  // "InstantBankTransfer" (RohoPay's bank_transfer rail) is deliberately not
+  // offered here — a live test transaction failed on RohoPay's own side
+  // (confirmed via their dashboard) even though the /collect call itself
+  // succeeded. The backend route/schema/dgateway support is left in place
+  // so it can be re-enabled once RohoPay confirms why, without re-doing
+  // this work — see app/api/member-portal/savings/deposit/route.ts.
+  const [channel, setChannel] = React.useState<"MobileMoney" | "BankTransfer">(
     "MobileMoney"
   )
   const [result, setResult] = React.useState<{
@@ -124,21 +124,19 @@ export function MemberDepositClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts.length, preselectedAccountId, form])
 
-  function switchChannel(next: "MobileMoney" | "InstantBankTransfer" | "BankTransfer") {
+  function switchChannel(next: "MobileMoney" | "BankTransfer") {
     setChannel(next)
     const savingsAccountId = form.getValues("savingsAccountId")
     const amount = form.getValues("amount")
     form.reset(
       (next === "MobileMoney"
         ? { savingsAccountId, amount, method: "MobileMoney", phone: "", network: undefined }
-        : next === "InstantBankTransfer"
-          ? { savingsAccountId, amount, method: "InstantBankTransfer", phone: "" }
-          : {
-              savingsAccountId,
-              amount,
-              method: "BankTransfer",
-              bankReference: "",
-            }) as unknown as MemberDepositInput
+        : {
+            savingsAccountId,
+            amount,
+            method: "BankTransfer",
+            bankReference: "",
+          }) as unknown as MemberDepositInput
     )
   }
 
@@ -252,7 +250,7 @@ export function MemberDepositClient() {
         <p className="mb-2 text-[13px] font-medium text-(--text-secondary)">
           How are you paying?
         </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {CHANNELS.map((c) => (
             <button
               key={c.value}
@@ -266,11 +264,6 @@ export function MemberDepositClient() {
             >
               {c.value === "MobileMoney" ? (
                 <MobileMoneyBadges />
-              ) : c.value === "InstantBankTransfer" ? (
-                <Zap
-                  className={`size-5 ${channel === c.value ? "text-(--accent-500)" : "text-(--text-muted)"}`}
-                  strokeWidth={1.75}
-                />
               ) : (
                 <Landmark
                   className={`size-5 ${channel === c.value ? "text-(--accent-500)" : "text-(--text-muted)"}`}
@@ -339,20 +332,6 @@ export function MemberDepositClient() {
                 )}
               />
             </>
-          ) : channel === "InstantBankTransfer" ? (
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel required>Phone number linked to your bank</FormLabel>
-                  <FormControl>
-                    <PhoneInput value={field.value} onChange={field.onChange} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           ) : (
             <>
               {bankAccount?.bankAccountNumber ? (
@@ -412,9 +391,7 @@ export function MemberDepositClient() {
           >
             {channel === "MobileMoney"
               ? "Send Mobile Money prompt"
-              : channel === "InstantBankTransfer"
-                ? "Send bank transfer prompt"
-                : "Submit for confirmation"}
+              : "Submit for confirmation"}
           </Button>
         </form>
       </Form>
