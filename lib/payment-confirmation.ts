@@ -47,7 +47,7 @@ export async function confirmSavingsDeposit(reference: string, req?: Request): P
       {
         id: pending.id,
         referenceType: "SavingsTransaction",
-        description: `Member self-service deposit (Mobile Money) — ${pending.savingsAccount.accountNumber}`,
+        description: `Member self-service deposit (${pending.method === "InstantBankTransfer" ? "Bank Transfer" : "Mobile Money"}) — ${pending.savingsAccount.accountNumber}`,
         type: "Deposit",
         amount: pending.amount,
         branchId: pending.branchId,

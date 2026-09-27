@@ -116,6 +116,13 @@ async function rohoPost(config: { apiUrl: string; apiKey: string }, path: string
 export async function collectPayment(params: {
   phone: string;
   network?: "MTN" | "Airtel";
+  // CONFIRMED via docs.rohopay.com/api-reference/collect: `payment_method`
+  // is a real, documented /api/v1/collect field, optional, defaulting to
+  // "mobile_money" — unlike `provider` below, this one isn't a guess.
+  // "bank_transfer"/"ussd"/"opay" are confirmed as valid values via
+  // RohoPay's own dashboard banner (Card Payments page), not yet by a docs
+  // page, so treat those three as best-effort until proven live.
+  paymentMethod?: "mobile_money" | "bank_transfer" | "ussd" | "opay";
   amountUgx: number;
   reference: string;
   narration?: string;
@@ -137,7 +144,11 @@ export async function collectPayment(params: {
     // mirrors what RohoPay's own /collect response already returns
     // (data.provider) — unconfirmed as a REQUEST field since /guides
     // 404'd, so this is sent best-effort and simply ignored if unrecognized.
-    ...(params.network ? { provider: params.network.toUpperCase() } : {}),
+    // Only meaningful for payment_method=mobile_money — omitted otherwise.
+    ...(params.network && (!params.paymentMethod || params.paymentMethod === "mobile_money")
+      ? { provider: params.network.toUpperCase() }
+      : {}),
+    ...(params.paymentMethod ? { payment_method: params.paymentMethod } : {}),
     amount: params.amountUgx,
     currency: "UGX",
     reference: params.reference,

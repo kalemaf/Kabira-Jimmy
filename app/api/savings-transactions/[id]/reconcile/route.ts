@@ -39,8 +39,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (transaction.status !== "Pending") {
     return NextResponse.json({ error: `This transaction is already ${transaction.status.toLowerCase()}` }, { status: 400 });
   }
-  if (transaction.method !== "MobileMoney" || !transaction.transactionId) {
-    return NextResponse.json({ error: "Only Mobile Money transactions can be reconciled here" }, { status: 400 });
+  if (
+    (transaction.method !== "MobileMoney" && transaction.method !== "InstantBankTransfer") ||
+    !transaction.transactionId
+  ) {
+    return NextResponse.json(
+      { error: "Only Mobile Money or Instant Bank Transfer transactions can be reconciled here" },
+      { status: 400 }
+    );
   }
 
   let gatewayStatus;

@@ -24,6 +24,13 @@ const TYPE_DESCRIPTIONS: Record<string, string> = {
   Shares: "Membership capital",
 }
 
+const METHOD_LABELS: Record<"Cash" | "MobileMoney" | "InstantBankTransfer" | "BankTransfer", string> = {
+  Cash: "Cash",
+  MobileMoney: "Mobile Money",
+  InstantBankTransfer: "Bank Transfer (Instant)",
+  BankTransfer: "Bank Transfer (Manual)",
+}
+
 type SavingsDetailData = {
   id: string
   accountNumber: string
@@ -38,7 +45,7 @@ type SavingsDetailData = {
     balanceAfter: number
     createdAt: string
     status: "PendingApproval" | "Pending" | "Confirmed" | "Failed"
-    method: "Cash" | "MobileMoney" | "BankTransfer"
+    method: "Cash" | "MobileMoney" | "InstantBankTransfer" | "BankTransfer"
     transactionId: string | null
     phone: string | null
     penaltyAmount: number
@@ -337,8 +344,10 @@ export function SavingsDetail({
               <div key={t.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
                 <div>
                   <p className="text-(--text-primary)">
-                    {formatUGX(t.amount)} · {t.method === "MobileMoney" ? "Mobile Money" : t.method === "BankTransfer" ? "Bank Transfer" : "Cash"}
-                    {t.method === "MobileMoney" && t.phone ? ` (${formatPhoneUG(t.phone)})` : ""}
+                    {formatUGX(t.amount)} · {METHOD_LABELS[t.method]}
+                    {(t.method === "MobileMoney" || t.method === "InstantBankTransfer") && t.phone
+                      ? ` (${formatPhoneUG(t.phone)})`
+                      : ""}
                   </p>
                   <p className="text-xs text-(--text-secondary)">
                     {collectedByLabel(t)} · {t.transactionId ?? "—"} · {new Date(t.createdAt).toLocaleString("en-UG")}
@@ -364,9 +373,9 @@ export function SavingsDetail({
                       Confirm
                     </Button>
                   </div>
-                ) : t.method === "MobileMoney" && canTransact ? (
+                ) : (t.method === "MobileMoney" || t.method === "InstantBankTransfer") && canTransact ? (
                   <div className="flex items-center gap-2">
-                    <StatusBadge status="Awaiting Mobile Money confirmation" tone="warning" />
+                    <StatusBadge status="Awaiting RohoPay confirmation" tone="warning" />
                     <Button
                       size="sm"
                       variant="outline"
@@ -413,8 +422,8 @@ export function SavingsDetail({
                     <StatusBadge status={t.type} tone={t.type === "Withdrawal" ? "warning" : "success"} />
                   </TableCell>
                   <TableCell className="whitespace-normal">
-                    {t.method === "MobileMoney" ? "Mobile Money" : t.method === "BankTransfer" ? "Bank Transfer" : "Cash"}
-                    {t.method === "MobileMoney" && t.phone ? (
+                    {METHOD_LABELS[t.method]}
+                    {(t.method === "MobileMoney" || t.method === "InstantBankTransfer") && t.phone ? (
                       <span className="block text-xs text-(--text-secondary)">{formatPhoneUG(t.phone)}</span>
                     ) : null}
                   </TableCell>

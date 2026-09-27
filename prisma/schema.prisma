@@ -818,6 +818,12 @@ enum SavingsTransactionMethod {
   Cash
   MobileMoney
   BankTransfer
+  // Automatic bank rail via RohoPay (payment_method=bank_transfer on the
+  // same /collect call Mobile Money uses) — confirmed by webhook exactly
+  // like Mobile Money, never optimistically. Distinct from BankTransfer
+  // (the member-declared-reference-then-staff-confirms flow), which stays
+  // untouched as a fallback.
+  InstantBankTransfer
 }
 
 // Uganda's Mobile Money prefixes aren't a reliable way to infer the network

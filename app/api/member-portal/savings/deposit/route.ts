@@ -11,14 +11,18 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 
 /**
- * Member self-service deposit — Mobile Money or Bank Transfer, both landing
- * as Pending until independently verified, never crediting the balance on
- * the member's own say-so:
+ * Member self-service deposit — Mobile Money, instant Bank Transfer, or
+ * manual Bank Transfer, all landing as Pending until independently verified,
+ * never crediting the balance on the member's own say-so:
  *  - Mobile Money: a real DGateway collection charge; the balance only moves
  *    once app/api/dgateway/webhook confirms the charge actually succeeded.
- *  - Bank Transfer: the member records the reference from a transfer they
- *    already made; a staff member checks the bank statement and confirms it
- *    via app/api/savings-transactions/[id]/confirm.
+ *  - Instant Bank Transfer: the same DGateway collection call, with
+ *    payment_method=bank_transfer instead of the mobile_money default —
+ *    same phone-based charge, same webhook confirmation, different rail.
+ *  - Bank Transfer (manual): the member records the reference from a
+ *    transfer they already made; a staff member checks the bank statement
+ *    and confirms it via app/api/savings-transactions/[id]/confirm. Kept as
+ *    a fallback independent of RohoPay's bank_transfer rail actually working.
  * Uses the same tables, balance-update logic, and ledger posting as the
  * staff-recorded deposit path — not a parallel system.
  */
@@ -133,7 +137,78 @@ export async function POST(req: Request) {
     }
   }
 
-  // Bank Transfer — Pending until a staff member confirms it against the bank statement.
+  if (method === "InstantBankTransfer") {
+    if (!isDGatewayConfigured()) {
+      return NextResponse.json(
+        { error: "Instant Bank Transfer isn't available right now — please use manual Bank Transfer or deposit at your branch." },
+        { status: 503 }
+      );
+    }
+
+    const reference = `NGS-SDEP-${account.id}-${Date.now()}`;
+    try {
+      const result = await collectPayment({
+        phone: parsed.data.phone,
+        paymentMethod: "bank_transfer",
+        amountUgx: amount,
+        reference,
+        narration: `Nexcgen savings deposit — ${account.member.memberNumber}`,
+      });
+
+      const transaction = await db.savingsTransaction.create({
+        data: {
+          savingsAccountId,
+          type: "Deposit",
+          amount,
+          balanceAfter: projectedBalance,
+          branchId,
+          status: "Pending",
+          method: "InstantBankTransfer",
+          transactionId: result.transactionRef,
+          phone: parsed.data.phone,
+          channel: "MemberPortal",
+          memberUserId: session.user.id,
+        },
+      });
+
+      await writeAuditLog({
+        userId: null,
+        action: "savings_transaction.member_deposit_initiated",
+        entityType: "SavingsTransaction",
+        entityId: transaction.id,
+        newValue: { savingsAccountId, amount, method, memberUserId: session.user.id, transactionRef: result.transactionRef },
+        request: req,
+      });
+
+      if (result.status === "successful") {
+        await confirmSavingsDeposit(result.transactionRef, req);
+        await invalidateTag(tags.savings);
+        return NextResponse.json({
+          status: "confirmed",
+          message: "Deposit successful — your balance has been updated.",
+          transaction,
+        });
+      }
+
+      await invalidateTag(tags.savings);
+      return NextResponse.json({
+        status: "pending",
+        message: "Bank transfer collection initiated — your balance will update once confirmed.",
+        transaction,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Bank transfer collection failed";
+      await sendCriticalAlert("Instant bank transfer savings deposit failed", {
+        savingsAccountId,
+        memberNumber: account.member.memberNumber,
+        amount,
+        error: message,
+      });
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+  }
+
+  // Bank Transfer (manual) — Pending until a staff member confirms it against the bank statement.
   const transaction = await db.savingsTransaction.create({
     data: {
       savingsAccountId,
