@@ -966,6 +966,18 @@ model SystemSettings {
   // SACCO fee income and never applied toward the loan balance.
   mobileMoneyRepaymentFeePercent Float @default(20)
 
+  // The SACCO's own bank account, shown to a member on the deposit page once
+  // they pick Bank Transfer so they know where to actually send the money —
+  // previously nowhere in the app, even though that deposit channel already
+  // existed. Deliberately just display data: the deposit itself still stays
+  // a member-declared reference confirmed by staff against the real bank
+  // statement (see app/api/savings-transactions/[id]/confirm/route.ts) —
+  // no bank API integration exists to verify or move funds automatically.
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  bankBranch        String?
+
   updatedAt DateTime @updatedAt
 
   @@map("system_settings")

@@ -10,6 +10,7 @@ import { isNinVerificationConfigured } from "@/lib/nin-verification";
 import { WithdrawalPolicyForm } from "@/components/dashboard/settings/withdrawal-policy-form";
 import { EligibilityPolicyForm } from "@/components/dashboard/settings/eligibility-policy-form";
 import { RepaymentFeePolicyForm } from "@/components/dashboard/settings/repayment-fee-policy-form";
+import { BankAccountForm } from "@/components/dashboard/settings/bank-account-form";
 import { formatUGX } from "@/lib/utils";
 import type { StaffRole } from "@/components/dashboard/nav-config";
 
@@ -117,6 +118,7 @@ export default async function SettingsPage() {
         <WithdrawalPolicyForm />
         <EligibilityPolicyForm />
         <RepaymentFeePolicyForm />
+        <BankAccountForm />
         <Card>
           <CardHeader>
             <CardTitle>Integrations</CardTitle>

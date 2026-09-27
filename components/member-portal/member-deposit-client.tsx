@@ -82,6 +82,21 @@ export function MemberDepositClient() {
 
   const accounts = response?.data ?? []
 
+  const { data: bankAccount } = useQuery({
+    queryKey: ["member-bank-account-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/member-portal/settings/bank-account")
+      if (!res.ok) throw new Error("Failed to load bank account details")
+      return res.json() as Promise<{
+        bankName: string | null
+        bankAccountName: string | null
+        bankAccountNumber: string | null
+        bankBranch: string | null
+      }>
+    },
+    enabled: channel === "BankTransfer",
+  })
+
   const form = useForm<MemberDepositInput>({
     resolver: zodResolver(memberDepositSchema),
     defaultValues: {
@@ -312,22 +327,54 @@ export function MemberDepositClient() {
               />
             </>
           ) : (
-            <FormField
-              control={form.control}
-              name="bankReference"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel required>Bank transfer reference</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. transaction reference from your bank slip"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            <>
+              {bankAccount?.bankAccountNumber ? (
+                <div className="space-y-1.5 rounded-lg border border-(--border-subtle) bg-(--bg-card-hover) p-4 text-sm">
+                  <p className="mb-1 text-[11px] font-semibold tracking-[0.04em] text-(--text-secondary) uppercase">
+                    Transfer to this account first
+                  </p>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-(--text-secondary)">Bank</span>
+                    <span className="text-right font-medium text-(--text-primary)">{bankAccount.bankName}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-(--text-secondary)">Account name</span>
+                    <span className="text-right font-medium text-(--text-primary)">{bankAccount.bankAccountName}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-(--text-secondary)">Account number</span>
+                    <span className="text-right font-mono font-medium text-(--text-primary)">{bankAccount.bankAccountNumber}</span>
+                  </div>
+                  {bankAccount.bankBranch ? (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-(--text-secondary)">Branch</span>
+                      <span className="text-right font-medium text-(--text-primary)">{bankAccount.bankBranch}</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-(--warning-border) bg-(--warning-soft) p-4 text-sm text-(--text-secondary)">
+                  Bank account details aren&apos;t set up yet — please visit your branch to deposit by bank
+                  transfer for now.
+                </p>
               )}
-            />
+              <FormField
+                control={form.control}
+                name="bankReference"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel required>Bank transfer reference</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g. transaction reference from your bank slip"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
           )}
 
           <Button
