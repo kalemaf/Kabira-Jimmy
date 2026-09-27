@@ -16,7 +16,7 @@ import {
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/dashboard/empty-state"
-import { formatUGX } from "@/lib/utils"
+import { formatUGX, formatPhoneUG } from "@/lib/utils"
 
 const TYPE_DESCRIPTIONS: Record<string, string> = {
   Daily: "Withdraw any time",
@@ -338,7 +338,7 @@ export function SavingsDetail({
                 <div>
                   <p className="text-(--text-primary)">
                     {formatUGX(t.amount)} · {t.method === "MobileMoney" ? "Mobile Money" : t.method === "BankTransfer" ? "Bank Transfer" : "Cash"}
-                    {t.method === "MobileMoney" && t.phone ? ` (${t.phone})` : ""}
+                    {t.method === "MobileMoney" && t.phone ? ` (${formatPhoneUG(t.phone)})` : ""}
                   </p>
                   <p className="text-xs text-(--text-secondary)">
                     {collectedByLabel(t)} · {t.transactionId ?? "—"} · {new Date(t.createdAt).toLocaleString("en-UG")}
@@ -415,7 +415,7 @@ export function SavingsDetail({
                   <TableCell className="whitespace-normal">
                     {t.method === "MobileMoney" ? "Mobile Money" : t.method === "BankTransfer" ? "Bank Transfer" : "Cash"}
                     {t.method === "MobileMoney" && t.phone ? (
-                      <span className="block text-xs text-(--text-secondary)">{t.phone}</span>
+                      <span className="block text-xs text-(--text-secondary)">{formatPhoneUG(t.phone)}</span>
                     ) : null}
                   </TableCell>
                   <TableCell className="whitespace-normal">{collectedByLabel(t)}</TableCell>

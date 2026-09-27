@@ -39,7 +39,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/dashboard/empty-state"
-import { formatUGX } from "@/lib/utils"
+import { formatUGX, formatPhoneUG } from "@/lib/utils"
 import { computeOutstandingBreakdown, calculateUpfrontFees } from "@/lib/loan-calculator"
 import type { AmortizationRow, InterestMethod } from "@/lib/loan-calculator"
 import type { LoanDisplayStatus } from "@/lib/loan-status"
@@ -552,7 +552,7 @@ export function LoanDetail({ loanId, role }: { loanId: string; role: StaffRole }
                 label="Disbursed to (phone)"
                 value={
                   loan.disbursementMethod === "MobileMoney"
-                    ? `${loan.disbursementPhone ?? "—"}${loan.disbursementNetwork ? ` (${loan.disbursementNetwork})` : ""}`
+                    ? `${formatPhoneUG(loan.disbursementPhone)}${loan.disbursementNetwork ? ` (${loan.disbursementNetwork})` : ""}`
                     : "N/A — " + loan.disbursementMethod
                 }
               />
