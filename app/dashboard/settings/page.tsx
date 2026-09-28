@@ -11,6 +11,7 @@ import { WithdrawalPolicyForm } from "@/components/dashboard/settings/withdrawal
 import { EligibilityPolicyForm } from "@/components/dashboard/settings/eligibility-policy-form";
 import { RepaymentFeePolicyForm } from "@/components/dashboard/settings/repayment-fee-policy-form";
 import { BankAccountForm } from "@/components/dashboard/settings/bank-account-form";
+import { MaintenanceFeeForm } from "@/components/dashboard/settings/maintenance-fee-form";
 import { formatUGX } from "@/lib/utils";
 import type { StaffRole } from "@/components/dashboard/nav-config";
 
@@ -119,6 +120,7 @@ export default async function SettingsPage() {
         <EligibilityPolicyForm />
         <RepaymentFeePolicyForm />
         <BankAccountForm />
+        <MaintenanceFeeForm />
         <Card>
           <CardHeader>
             <CardTitle>Integrations</CardTitle>

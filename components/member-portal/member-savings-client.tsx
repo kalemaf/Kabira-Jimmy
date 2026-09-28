@@ -12,12 +12,12 @@ import { formatUGX } from "@/lib/utils"
 
 type Transaction = {
   id: string
-  type: "Deposit" | "Withdrawal" | "Interest"
+  type: "Deposit" | "Withdrawal" | "Fee" | "Interest"
   amount: number
   balanceAfter: number
   channel: "Staff" | "MemberPortal"
   status: "Pending" | "Confirmed" | "Failed"
-  method: "Cash" | "MobileMoney" | "BankTransfer"
+  method: "Cash" | "MobileMoney" | "InstantBankTransfer" | "BankTransfer" | "System"
   createdAt: string
   staffName: string
 }
@@ -190,8 +190,8 @@ export function MemberSavingsClient() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className={t.type === "Withdrawal" ? "text-(--error-600)" : "text-(--success-600)"}>
-                      {t.type === "Withdrawal" ? "-" : "+"}
+                    <p className={t.type === "Withdrawal" || t.type === "Fee" ? "text-(--error-600)" : "text-(--success-600)"}>
+                      {t.type === "Withdrawal" || t.type === "Fee" ? "-" : "+"}
                       {formatUGX(t.amount)}
                     </p>
                     {t.status === "Pending" && t.method === "MobileMoney" ? (

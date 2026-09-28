@@ -7,6 +7,7 @@ import { ApprovalStatusEmail } from "@/components/emails/approval-status-email";
 import { DisbursementConfirmationEmail } from "@/components/emails/disbursement-confirmation-email";
 import { PenaltyAlertEmail } from "@/components/emails/penalty-alert-email";
 import { MembershipExpiryEmail } from "@/components/emails/membership-expiry-email";
+import { MaintenanceFeeEmail } from "@/components/emails/maintenance-fee-email";
 import type { ReactElement } from "react";
 
 async function sendEmail(to: string, subject: string, react: ReactElement) {
@@ -81,6 +82,21 @@ export async function notifyWithdrawal(to: Recipient, amount: number, penaltyAmo
       ? sendEmail(to.email, "Withdrawal confirmed", DisbursementConfirmationEmail({ memberName: to.name, amount: amountStr, method: "Mobile Money" }))
       : Promise.resolve(),
     sendSms(to.phone, `Nexcgen: Your withdrawal of ${amountStr}${note} has been sent to your Mobile Money. Thank you.`),
+  ]);
+}
+
+export async function notifyMaintenanceFee(to: Recipient, amount: number, newBalance: number) {
+  const amountStr = formatUGX(amount);
+  const balanceStr = formatUGX(newBalance);
+  await Promise.all([
+    to.email
+      ? sendEmail(
+          to.email,
+          "Account maintenance fee charged",
+          MaintenanceFeeEmail({ memberName: to.name, amount: amountStr, newBalance: balanceStr })
+        )
+      : Promise.resolve(),
+    sendSms(to.phone, `Nexcgen: A monthly account maintenance fee of ${amountStr} was deducted. New balance: ${balanceStr}.`),
   ]);
 }
 

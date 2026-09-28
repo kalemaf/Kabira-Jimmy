@@ -7,7 +7,7 @@ import { headers } from "next/headers";
 type UnifiedTxn = {
   id: string;
   date: string;
-  type: "Deposit" | "Withdrawal" | "Interest" | "Loan Repayment" | "Loan Disbursement";
+  type: "Deposit" | "Withdrawal" | "Fee" | "Interest" | "Loan Repayment" | "Loan Disbursement";
   description: string;
   amount: number;
   balanceAfter: number | null;

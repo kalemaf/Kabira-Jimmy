@@ -35,7 +35,10 @@ export async function GET() {
   const items = [
     ...savingsTxns.map((t) => ({
       id: `savings-${t.id}`,
-      message: `${t.type} of UGX ${t.amount.toLocaleString()} recorded`,
+      message:
+        t.type === "Fee"
+          ? `Account maintenance fee of UGX ${t.amount.toLocaleString()} charged`
+          : `${t.type} of UGX ${t.amount.toLocaleString()} recorded`,
       at: t.createdAt,
     })),
     ...repayments.map((r) => ({

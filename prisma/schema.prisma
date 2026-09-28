@@ -794,11 +794,19 @@ enum SavingsTransactionType {
   Deposit
   Withdrawal
   Interest
+  // A system-charged deduction (currently: the monthly account maintenance
+  // fee, see lib/account-maintenance-fee.ts) — kept distinct from Withdrawal
+  // so reports/statements can tell "the member took money out" apart from
+  // "the SACCO charged a fee" at a glance.
+  Fee
 }
 
 enum SavingsTransactionChannel {
   Staff
   MemberPortal
+  // Posted by a cron job, not a person — currently only the monthly
+  // account maintenance fee.
+  System
 }
 
 // Staff-recorded transactions settle immediately (Confirmed) — a teller has
@@ -824,6 +832,9 @@ enum SavingsTransactionMethod {
   // (the member-declared-reference-then-staff-confirms flow), which stays
   // untouched as a fallback.
   InstantBankTransfer
+  // Not a real payment channel — used for cron-posted entries (the monthly
+  // account maintenance fee) where no money actually moves through a rail.
+  System
 }
 
 // Uganda's Mobile Money prefixes aren't a reliable way to infer the network
@@ -988,6 +999,13 @@ model SystemSettings {
   bankAccountName   String?
   bankAccountNumber String?
   bankBranch        String?
+
+  // Monthly account maintenance fee (see lib/account-maintenance-fee.ts) —
+  // off by default so it never starts silently deducting real members'
+  // money the moment this column exists; a SuperAdmin must explicitly turn
+  // it on from Settings.
+  accountMaintenanceFeeEnabled   Boolean @default(false)
+  accountMaintenanceFeeAmountUgx Int     @default(1000)
 
   updatedAt DateTime @updatedAt
 

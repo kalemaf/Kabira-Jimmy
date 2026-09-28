@@ -24,11 +24,12 @@ const TYPE_DESCRIPTIONS: Record<string, string> = {
   Shares: "Membership capital",
 }
 
-const METHOD_LABELS: Record<"Cash" | "MobileMoney" | "InstantBankTransfer" | "BankTransfer", string> = {
+const METHOD_LABELS: Record<"Cash" | "MobileMoney" | "InstantBankTransfer" | "BankTransfer" | "System", string> = {
   Cash: "Cash",
   MobileMoney: "Mobile Money",
   InstantBankTransfer: "Bank Transfer (Instant)",
   BankTransfer: "Bank Transfer (Manual)",
+  System: "System",
 }
 
 type SavingsDetailData = {
@@ -45,7 +46,7 @@ type SavingsDetailData = {
     balanceAfter: number
     createdAt: string
     status: "PendingApproval" | "Pending" | "Confirmed" | "Failed"
-    method: "Cash" | "MobileMoney" | "InstantBankTransfer" | "BankTransfer"
+    method: "Cash" | "MobileMoney" | "InstantBankTransfer" | "BankTransfer" | "System"
     transactionId: string | null
     phone: string | null
     penaltyAmount: number
@@ -419,7 +420,7 @@ export function SavingsDetail({
                 <TableRow key={t.id}>
                   <TableCell>{new Date(t.createdAt).toLocaleString("en-UG")}</TableCell>
                   <TableCell>
-                    <StatusBadge status={t.type} tone={t.type === "Withdrawal" ? "warning" : "success"} />
+                    <StatusBadge status={t.type} tone={t.type === "Withdrawal" || t.type === "Fee" ? "warning" : "success"} />
                   </TableCell>
                   <TableCell className="whitespace-normal">
                     {METHOD_LABELS[t.method]}

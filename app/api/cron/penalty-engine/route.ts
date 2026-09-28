@@ -3,6 +3,7 @@ import { generateAmortizationSchedule, computeOutstandingBreakdown } from "@/lib
 import { writeAuditLog } from "@/lib/audit";
 import { invalidateTag, tags } from "@/lib/cache";
 import { notifyDueDateReminder, notifyPenalty, notifyStaffEscalation } from "@/lib/notify";
+import { runMonthlyAccountMaintenanceFee } from "@/lib/account-maintenance-fee";
 import { NextResponse } from "next/server";
 
 const DEFAULT_AFTER_DAYS = 90;
@@ -187,10 +188,17 @@ export async function GET(req: Request) {
 
   await invalidateTag(tags.loans);
 
+  // Piggybacks on this daily trigger rather than its own Vercel Cron entry —
+  // see lib/account-maintenance-fee.ts for why. Internally a no-op on every
+  // day except the 1st (or if the fee isn't enabled in Settings).
+  const maintenanceFeeResult =
+    now.getUTCDate() === 1 ? await runMonthlyAccountMaintenanceFee() : { skipped: true as const, reason: "not_first_of_month" as const };
+
   return NextResponse.json({
     checked: activeLoans.length,
     flaggedOverdue,
     flaggedDefaulted,
     notificationsQueued,
+    maintenanceFee: maintenanceFeeResult,
   });
 }

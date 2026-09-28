@@ -34,6 +34,7 @@ const TYPE_OPTIONS = [
   { value: "all", label: "All types" },
   { value: "Deposit", label: "Deposits" },
   { value: "Withdrawal", label: "Withdrawals" },
+  { value: "Fee", label: "Fees" },
   { value: "Loan Disbursement", label: "Loan Disbursements" },
   { value: "Loan Repayment", label: "Loan Repayments" },
   { value: "Interest", label: "Interest" },
