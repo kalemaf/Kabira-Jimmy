@@ -42,8 +42,11 @@ export async function checkLoanEligibility(input: {
   const flags: string[] = [];
   let riskScore = 0;
 
-  const { savingsToLoanRatio: SAVINGS_TO_LOAN_RATIO, maxDebtToIncomeRatio: MAX_DEBT_TO_INCOME_RATIO } =
-    await getEligibilityPolicy();
+  const {
+    savingsToLoanRatio: SAVINGS_TO_LOAN_RATIO,
+    maxDebtToIncomeRatio: MAX_DEBT_TO_INCOME_RATIO,
+    minimumSavingsForLoanUgx: MINIMUM_SAVINGS_FOR_LOAN,
+  } = await getEligibilityPolicy();
 
   const member = await db.member.findUnique({ where: { id: input.memberId } });
   if (!member) throw new Error("Member not found");
@@ -135,10 +138,17 @@ export async function checkLoanEligibility(input: {
   const savingsBalance = savingsAgg._sum.balance ?? 0;
   const requiredSavings = Math.round(input.requestedAmount * SAVINGS_TO_LOAN_RATIO);
 
+  // A flat minimum floor (admin-configurable, see Settings → Loan eligibility
+  // policy) always blocks outright — the ratio check below only ever warns,
+  // which would otherwise let a member with a small-but-nonzero balance
+  // qualify for an equally small loan despite not meeting the SACCO's
+  // baseline savings requirement.
   let savingsCheck: CheckResult = "pass";
-  if (savingsBalance === 0) {
+  if (savingsBalance < MINIMUM_SAVINGS_FOR_LOAN) {
     savingsCheck = "fail";
-    flags.push("Member has no savings account or balance on record");
+    flags.push(
+      `Savings balance (${savingsBalance}) is below the minimum required to qualify for any loan (${MINIMUM_SAVINGS_FOR_LOAN})`
+    );
     riskScore += 25;
   } else if (savingsBalance < requiredSavings) {
     savingsCheck = "warn";

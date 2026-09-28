@@ -12,12 +12,14 @@ type EligibilityPolicy = {
   savingsToLoanRatio: number
   maxDebtToIncomeRatio: number
   guarantorExposureLimitUgx: number
+  minimumSavingsForLoanUgx: number
 }
 
 type Draft = {
   savingsToLoanRatioPercent: number
   maxDebtToIncomeRatioPercent: number
   guarantorExposureLimitUgx: number
+  minimumSavingsForLoanUgx: number
 }
 
 export function EligibilityPolicyForm() {
@@ -39,6 +41,7 @@ export function EligibilityPolicyForm() {
         savingsToLoanRatioPercent: Math.round(data.savingsToLoanRatio * 100),
         maxDebtToIncomeRatioPercent: Math.round(data.maxDebtToIncomeRatio * 100),
         guarantorExposureLimitUgx: data.guarantorExposureLimitUgx,
+        minimumSavingsForLoanUgx: data.minimumSavingsForLoanUgx,
       })
     }
   }, [data, draft])
@@ -62,6 +65,7 @@ export function EligibilityPolicyForm() {
         savingsToLoanRatioPercent: Math.round(updated.savingsToLoanRatio * 100),
         maxDebtToIncomeRatioPercent: Math.round(updated.maxDebtToIncomeRatio * 100),
         guarantorExposureLimitUgx: updated.guarantorExposureLimitUgx,
+        minimumSavingsForLoanUgx: updated.minimumSavingsForLoanUgx,
       })
       queryClient.invalidateQueries({ queryKey: ["eligibility-policy"] })
     },
@@ -83,6 +87,17 @@ export function EligibilityPolicyForm() {
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-(--text-primary)">Minimum savings to qualify for a loan</p>
+            <p className="mb-2 text-xs text-(--text-secondary)">
+              A member below this savings balance is ineligible for any loan, regardless of amount requested.
+            </p>
+            <CurrencyInput
+              value={draft.minimumSavingsForLoanUgx}
+              onChange={(v) => setDraft({ ...draft, minimumSavingsForLoanUgx: v ?? 0 })}
+            />
+          </div>
+
           <div>
             <p className="mb-1.5 text-sm font-medium text-(--text-primary)">Required savings (% of loan amount)</p>
             <p className="mb-2 text-xs text-(--text-secondary)">

@@ -7,6 +7,7 @@ export type EligibilityPolicy = {
   savingsToLoanRatio: number;
   maxDebtToIncomeRatio: number;
   guarantorExposureLimitUgx: number;
+  minimumSavingsForLoanUgx: number;
 };
 
 /** Reads the SuperAdmin-editable loan eligibility policy, creating the singleton row with schema defaults on first access. */
@@ -20,6 +21,7 @@ export async function getEligibilityPolicy(): Promise<EligibilityPolicy> {
     savingsToLoanRatio: settings.savingsToLoanRatioPercent / 100,
     maxDebtToIncomeRatio: settings.maxDebtToIncomeRatioPercent / 100,
     guarantorExposureLimitUgx: settings.guarantorExposureLimitUgx,
+    minimumSavingsForLoanUgx: settings.minimumSavingsForLoanUgx,
   };
 }
 
@@ -27,6 +29,7 @@ export async function updateEligibilityPolicy(input: {
   savingsToLoanRatioPercent: number;
   maxDebtToIncomeRatioPercent: number;
   guarantorExposureLimitUgx: number;
+  minimumSavingsForLoanUgx: number;
 }): Promise<EligibilityPolicy> {
   const settings = await db.systemSettings.upsert({
     where: { id: SETTINGS_ID },
@@ -37,5 +40,6 @@ export async function updateEligibilityPolicy(input: {
     savingsToLoanRatio: settings.savingsToLoanRatioPercent / 100,
     maxDebtToIncomeRatio: settings.maxDebtToIncomeRatioPercent / 100,
     guarantorExposureLimitUgx: settings.guarantorExposureLimitUgx,
+    minimumSavingsForLoanUgx: settings.minimumSavingsForLoanUgx,
   };
 }

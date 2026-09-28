@@ -90,13 +90,18 @@ export function MemberLoanApplicationForm() {
     queryFn: async () => {
       const res = await fetch("/api/member-portal/dashboard-summary")
       if (!res.ok) throw new Error("Failed to load")
-      return res.json() as Promise<{ totalSavingsBalance: number; savingsToLoanRatio: number }>
+      return res.json() as Promise<{
+        totalSavingsBalance: number
+        savingsToLoanRatio: number
+        minimumSavingsForLoanUgx: number
+      }>
     },
     staleTime: 30_000,
   })
-  // SuperAdmin-configurable (Settings page) — this fallback only matters
+  // SuperAdmin-configurable (Settings page) — these fallbacks only matter
   // for the brief window before the query resolves.
   const savingsToLoanRatio = dashboard?.savingsToLoanRatio ?? 0.1
+  const minimumSavingsForLoan = dashboard?.minimumSavingsForLoanUgx ?? 30000
 
   const form = useForm<MemberLoanApplicationInput>({
     resolver: zodResolver(memberLoanApplicationSchema),
@@ -130,7 +135,7 @@ export function MemberLoanApplicationForm() {
 
   const values = form.watch()
   const selectedProduct = products.find((p) => p.id === values.loanProductId)
-  const requiredSavings = Math.round((values.amount || 0) * savingsToLoanRatio)
+  const requiredSavings = Math.max(Math.round((values.amount || 0) * savingsToLoanRatio), minimumSavingsForLoan)
   const savingsOk = (dashboard?.totalSavingsBalance ?? 0) >= requiredSavings
 
   const mutation = useMutation({
@@ -215,9 +220,12 @@ export function MemberLoanApplicationForm() {
                     <CurrencyInput value={field.value} onChange={(v) => field.onChange(v ?? 0)} />
                   </FormControl>
                   <p className="text-xs text-(--text-secondary)">
-                    Needs savings of at least {formatUGX(requiredSavings)} ({savingsToLoanRatio * 100}% of amount) —
-                    your current savings: {formatUGX(dashboard?.totalSavingsBalance ?? 0)}{" "}
-                    {values.amount > 0 ? (savingsOk ? "✓" : "— below recommended") : ""}
+                    Needs savings of at least {formatUGX(requiredSavings)} (
+                    {requiredSavings === minimumSavingsForLoan
+                      ? "minimum required to qualify for any loan"
+                      : `${savingsToLoanRatio * 100}% of amount`}
+                    ) — your current savings: {formatUGX(dashboard?.totalSavingsBalance ?? 0)}{" "}
+                    {values.amount > 0 ? (savingsOk ? "✓" : "— below required") : ""}
                   </p>
                   <FormMessage />
                 </FormItem>

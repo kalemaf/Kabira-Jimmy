@@ -8,6 +8,7 @@ const updateSchema = z.object({
   savingsToLoanRatioPercent: z.number().min(0).max(100),
   maxDebtToIncomeRatioPercent: z.number().min(0).max(100),
   guarantorExposureLimitUgx: z.number().int().min(1),
+  minimumSavingsForLoanUgx: z.number().int().min(0),
 });
 
 // GET is open to any staff session — the loan application wizard (used by

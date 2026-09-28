@@ -965,6 +965,11 @@ model SystemSettings {
   savingsToLoanRatioPercent   Float @default(10)
   maxDebtToIncomeRatioPercent Float @default(30)
   guarantorExposureLimitUgx   Int   @default(10000000)
+  // A flat floor, separate from the ratio above — a member below this
+  // savings balance fails eligibility outright, regardless of how small a
+  // loan they're requesting (the ratio check alone only warns, never blocks,
+  // for a low-but-nonzero balance against a small loan amount).
+  minimumSavingsForLoanUgx    Int   @default(30000)
 
   // Staff-collected Mobile Money loan repayments charge the member this
   // much extra on top of what they owe (see lib/repayment-fee-policy.ts) —

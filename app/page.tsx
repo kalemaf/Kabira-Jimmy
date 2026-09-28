@@ -540,7 +540,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-(--border-subtle) px-4 py-16 md:px-8">
+      <footer className="border-t border-(--border-subtle) bg-(--accent-soft) px-4 py-16 md:px-8">
         <div className="mx-auto max-w-[1200px]">
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -556,25 +556,25 @@ export default function LandingPage() {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-(--text-primary)">
+              <h4 className="text-sm font-semibold text-(--brand-blue)">
                 Product
               </h4>
               <nav className="mt-3 flex flex-col gap-2.5">
                 <a
                   href="#features"
-                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--brand-blue)"
                 >
                   Features
                 </a>
                 <a
                   href="#how-it-works"
-                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--brand-blue)"
                 >
                   How it works
                 </a>
                 <a
                   href="#security"
-                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--brand-blue)"
                 >
                   Security
                 </a>
@@ -582,19 +582,19 @@ export default function LandingPage() {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-(--text-primary)">
+              <h4 className="text-sm font-semibold text-(--brand-blue)">
                 Access
               </h4>
               <nav className="mt-3 flex flex-col gap-2.5">
                 <Link
                   href="/auth/sign-in"
-                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--brand-blue)"
                 >
                   Staff login
                 </Link>
                 <Link
                   href="/member-portal/login"
-                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--brand-blue)"
                 >
                   Member portal
                 </Link>
@@ -602,7 +602,7 @@ export default function LandingPage() {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-(--text-primary)">
+              <h4 className="text-sm font-semibold text-(--brand-blue)">
                 Contact
               </h4>
               <nav className="mt-3 flex flex-col gap-2.5">
@@ -610,13 +610,13 @@ export default function LandingPage() {
                   href="https://www.efficraftconsultants.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--brand-blue)"
                 >
                   www.efficraftconsultants.com
                 </a>
                 <a
                   href="mailto:info@kfmms.com"
-                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                  className="text-sm text-(--text-secondary) transition-colors hover:text-(--brand-blue)"
                 >
                   info@kfmms.com
                 </a>
@@ -627,7 +627,7 @@ export default function LandingPage() {
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-(--border-subtle) pt-8 text-center sm:flex-row sm:text-left">
             <p className="text-[13px] text-(--text-secondary)">
               Managed by{" "}
-              <span className="font-medium text-(--text-primary)">
+              <span className="font-medium text-(--brand-blue)">
                 Efficraft Consultants Limited
               </span>
             </p>

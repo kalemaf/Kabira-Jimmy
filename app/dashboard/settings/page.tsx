@@ -104,7 +104,7 @@ export default async function SettingsPage() {
             </CardHeader>
             <CardContent>
               {wallet ? (
-                <p className="font-mono text-2xl font-semibold tabular-nums text-(--text-primary)">
+                <p className="font-mono text-2xl font-semibold tabular-nums text-(--brand-green)">
                   {formatUGX(wallet.balance)}
                 </p>
               ) : (

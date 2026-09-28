@@ -117,7 +117,7 @@ export async function GET() {
     };
   }
 
-  const { savingsToLoanRatio } = await getEligibilityPolicy();
+  const { savingsToLoanRatio, minimumSavingsForLoanUgx } = await getEligibilityPolicy();
   const maxEligibleLoan = Math.round(totalSavingsBalance / savingsToLoanRatio);
 
   return NextResponse.json({
@@ -136,6 +136,7 @@ export async function GET() {
     interestEarned,
     maxEligibleLoan,
     savingsToLoanRatio,
+    minimumSavingsForLoanUgx,
     loan: loanSummary,
     monthlyDeposits,
     savingsGrowth,
